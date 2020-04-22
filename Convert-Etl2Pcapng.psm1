@@ -1,11 +1,12 @@
-# Convert-Etl2Pcapng on right-click
+# Convert-Etl2Pcapng Module
 
-<#
+<# TO-DO: 
 
-TO-DO:
-
+- Add Manual setting for environments where the module cannot reach the internet
+- Add proxy details to settings and update script so it works with a proxy. Possibly create/update a cmdlet to add those settings.
 
 #>
+
 
 # FUNCTION : Register-Etl2Pcapng
 # PURPOSE  : Registers the ecript to ETL files  
@@ -29,7 +30,7 @@ function Register-Etl2Pcapng
     #>
 
     [CmdletBinding()]
-    param(
+    param (
         # Causes the explorer menu option, "Convert with etl2pcapng", to not exit the command prompt when complete and output Verbose logging.
         [switch]$UseVerbose,
         # Causes the explorer menu option, "Convert with etl2pcapng", to not exit the command prompt when complete and output Debug logging.
@@ -47,12 +48,14 @@ function Register-Etl2Pcapng
 
         Write-Verbose "New-RegKey: Starting"
         # make sure the PSDrive to HKCR is created
-        if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) {
+        if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
+        {
             New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
         }
 
         # do the reg work
-        try {
+        try 
+        {
             Write-Verbose "New-RegKey: Creating key $path"
             if ($type -eq "Directory") {
                 New-Item $path -ItemType $type -Force -EA SilentlyContinue | Out-Null
@@ -62,7 +65,8 @@ function Register-Etl2Pcapng
                 Set-ItemProperty -LiteralPath $path -Name '(Default)' -Value $value -Force -EA SilentlyContinue | Out-Null
             }
         }
-        catch {
+        catch 
+        {
             Write-Error "New-RegKey: Failed to create $path."
             return $false
         }
@@ -75,7 +79,8 @@ function Register-Etl2Pcapng
 
     # test for Admin access
     Write-Verbose "Register-Etl2Pcapng: Test admin rights."
-    if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
+    {
         Write-Error "Register-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again."
         return $null
     }
@@ -91,7 +96,8 @@ function Register-Etl2Pcapng
 
     # create a PSDrive to HKEY_CLASSES_ROOT
     Write-Verbose "Register-Etl2Pcapng: Create PSDrive for HKEY_CLASSES_ROOT."
-    if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) {
+    if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
+    {
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
     }
 
@@ -104,13 +110,16 @@ function Register-Etl2Pcapng
     Write-Verbose "Register-Etl2Pcapng: Configure Convert-ETL2PCAPNG."
     if (-NOT (New-RegKey "HKCR:\Convert-Etl2Pcapng\Shell\CONVERT" -value "Convert with etl2pcapng")) { Write-Error "Could not write reg 2."; exit }
 
-    if ($UseVerbose) {
+    if ($UseVerbose) 
+    {
         $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng %1 -Verbose'
     }
-    elseif ($UseDebug) {
+    elseif ($UseDebug) 
+    {
         $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng %1 -Debug'
     }
-    else {
+    else 
+    {
         $cmd = 'cmd /c powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng %1'
     }
 
@@ -156,14 +165,16 @@ function Unregister-Etl2Pcapng
 
     # test for Admin access
     Write-Verbose "Unregister-Etl2Pcapng: Test admin rights."
-    if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
+    {
         Write-Error "Unregister-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again."
         return $null
     }
 
     # create a PSDrive to HKEY_CLASSES_ROOT
     Write-Verbose "Unregister-Etl2Pcapng: Creating HKCR PSDrive."
-    if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) {
+    if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
+    {
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
     }
 
@@ -211,8 +222,8 @@ function Convert-Etl2Pcapng
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'LiteralPath')]
-    param(
-        # LiteralPath accepts a string path
+    param (
+        # Path accepts a literal string path.
         [parameter( Position = 0,
             ParameterSetName = 'LiteralPath',
             HelpMessage = 'Enter one or more filenames as a string',
@@ -220,7 +231,7 @@ function Convert-Etl2Pcapng
         [string]
         $Path,
 
-        # Path accepts a FileSystemInfo object, from cmdlets like Get-Item and Get-ChildItem
+        # PSPath accepts a FileSystemInfo object from cmdlets like Get-Item and Get-ChildItem. Accepts pipeline input.
         [parameter( Position = 0,
             ParameterSetName = 'Path',
             HelpMessage = 'Enter one or more filenames as a string',
@@ -249,59 +260,73 @@ function Convert-Etl2Pcapng
 
     Write-Verbose "Convert-Etl2Pcapng: Work! Work!"
 
+    ### Validating paths and parameters ###
     # check the path param
-    # if a dir/container, then look for ETL files
     Write-Verbose "Convert-Etl2Pcapng: Validate Path."
-    if ($PSPath -is [System.IO.FileSystemInfo]) {
+    if ($PSPath -is [System.IO.FileSystemInfo]) 
+    {
         $isPathFnd = $PSPath
     }
-    else {
+    else 
+    {
         $isPathFnd = Get-Item $Path -EA SilentlyContinue    
     }
     
-    if ($isPathFnd) {
+    # if a dir/container, then look for ETL files
+    if ($isPathFnd) 
+    {
         # is this a container/directory
-        if ($isPathFnd.PSisContainer) {
+        if ($isPathFnd.PSisContainer) 
+        {
             Write-Verbose "Convert-Etl2Pcapng: Searching for ETL files in $($isPathFnd.FullName)."
             # look for ETL files
-            if ($Recurse) {
+            if ($Recurse) 
+            {
                 Write-Verbose "Convert-Etl2Pcapng: Dir with child container recurse."
                 [array]$etlFiles = Get-ChildItem $isPathFnd.FullName -Filter "*.etl" -Recurse -Force -ErrorAction SilentlyContinue
             }
-            else {
+            else 
+            {
                 Write-Verbose "Convert-Etl2Pcapng: Dir with no child containers."
                 [array]$etlFiles = Get-ChildItem $isPathFnd.FullName -Filter "*.etl" -Force -ErrorAction SilentlyContinue
             }
         }
-        elseif ($isPathFnd.Extension -eq ".etl") {
+        elseif ($isPathFnd.Extension -eq ".etl") 
+        {
             Write-Verbose "Convert-Etl2Pcapng: Single file."
             [array]$etlFiles = $isPathFnd
         }
     }
 
     # exit if no ETL file(s) found
-    if (-NOT $etlFiles) {
-        if ($PSPath -is [System.IO.FileSystemInfo]) {
+    if (-NOT $etlFiles) 
+    {
+        if ($PSPath -is [System.IO.FileSystemInfo]) 
+        {
             Write-Error "Convert-Etl2Pcapng: Failed to find a valid ETL file. Path: $($PSPath.FullName)"
         }
-        else {
+        else 
+        {
             Write-Error "Convert-Etl2Pcapng: Failed to find a valid ETL file. Path: $Path"
         }
         return $null
     }
 
     # make sure $Out is a valid location
-    if ($Out) {
+    if ($Out) 
+    {
         Write-Verbose "Convert-Etl2Pcapng: Validate Out."
 
-        if (-NOT (Test-Path $Out -IsValid)) {
+        if (-NOT (Test-Path $Out -IsValid)) 
+        {
             Write-Error "Convert-Etl2Pcapng: The Out path is an invalid path. Out: $Out"
             return $null
         }
 
         # create the dir if it's not there
         $isOutFnd = Get-Item $Out -EA SilentlyContinue
-        if (-NOT $isOutFnd) {
+        if (-NOT $isOutFnd) 
+        {
             try {
                 Write-Verbose "Convert-Etl2Pcapng: Creating output path $Out"
                 New-Item $Out -ItemType Directory -Force -EA Stop | Out-Null
@@ -313,13 +338,13 @@ function Convert-Etl2Pcapng
     }
 
 
-
-    # get the path to etl2pcapng.exe
+    ### get the path to etl2pcapng.exe
     Write-Verbose "Convert-Etl2Pcapng: Getting for etl2pcapng location."
     $e2pPath = Update-Etl2Pcapng
 
-    # validate
-    if ($e2pPath) {
+    # validate etl2pcapng is actually there and strip out the parent dir
+    if ($e2pPath) 
+    {
         $isE2PFnd = Get-Item $e2pPath -EA SilentlyContinue
 
         if ($isE2PFnd) {
@@ -331,15 +356,18 @@ function Convert-Etl2Pcapng
         }
     }
 
-    # do the conversion work
+    #### Finally do the conversion work ####
     Write-Verbose "Convert-Etl2Pcapng: Starting ETL to PCAPNG conversion(s)."
     Push-Location $e2pDir
-    foreach ($file in $etlFiles) {
-        if ($Out) {
+    foreach ($file in $etlFiles) 
+    {
+        if ($Out) 
+        {
             Write-Verbose "Convert-Etl2Pcapng: Converting $($file.FullName) to $Out\$($file.BaseName).pcapng"
             .\etl2pcapng.exe "$($file.FullName)" "$Out\$($file.BaseName).pcapng"
         }
-        else {
+        else 
+        {
             Write-Verbose "Convert-Etl2Pcapng: Converting $($file.FullName) to $($file.DirectoryName)\$($file.BaseName).pcapng"
             .\etl2pcapng.exe "$($file.FullName)" "$($file.DirectoryName)\$($file.BaseName).pcapng"
         }
@@ -371,8 +399,9 @@ function Update-Etl2Pcapng
 
     Write-Verbose "Update-Etl2Pcapng: Starting"
 
-    # check if etlpcapng is already downloaded
-    if ([System.Environment]::Is64BitOperatingSystem) {
+    # check if etlpcapng is already downloaded - do not use pwsh terney to maintain Windows PowerShell backwards compatibilty!
+    if ([System.Environment]::Is64BitOperatingSystem) 
+    {
         $arch = "x64"
     }
     else {
@@ -392,43 +421,48 @@ function Update-Etl2Pcapng
     Write-Verbose "Update-Etl2Pcapng: Timestamps:`nCurrent date:`t$((Get-Date).Date)`nSettings date:`t$($settings.LastUpdate.Date)`n"
 
     # check for an update when -Force set or it's been 7 days since we last checked
-    if ($Force -or ((Get-Date).Date.AddDays(-7) -gt $settings.LastUpdate.Date)) {
+    if ($Force -or ((Get-Date).Date.AddDays(-7) -gt $settings.LastUpdate.Date)) 
+    {
         Write-Verbose "Update-Etl2Pcapng: Checking for an update to etl2pcapng."
+        # controls whether a download of etl2pcapng.exe is needed
         $download = $false
 
-        # make sure this is being run as a module and not a stand-alone script/function
-        if (-NOT $here) {
-            Write-Error "Update-Etl2Pcapng: Could not find the module path."
-            return $null
-        }
-
         Write-Verbose "Update-Etl2Pcapng: Getting etl2pcapng releases from GitGub."
-        $tagsUri = 'https://github.com/microsoft/Convert-Etl2Pcapng/releases' 
+        $tagsUri = 'https://github.com/microsoft/etl2pcapng/releases' 
 
-        # grab the etl2pcapng tags page from GitHub
-        try {
+        # grab the etl2pcapng releases page from GitHub
+        try 
+        {
             $tags = Invoke-WebRequest -Uri $tagsUri -EA Stop
         }
-        catch {
+        catch 
+        {
             Write-Error "Update-Etl2Pcapng: Cannot reach the etl2pcapng GitHub page: $($error[0].ToString())"
+            break
         }
 
         # parse the HTML content
         $HTML = New-Object -Com "HTMLFile"
 
-        try {
-            # This works in PowerShell with Office installed
+        # this manages parsing the HTML based on a variety of conditions
+        try 
+        {
+            # works with Win PoSh
             $html.IHTMLDocument2_write($tags.Content)
         }
-        catch {
-            # This works when Office is not installed    
+        catch 
+        {
+            # works with pwsh7
             $src = [System.Text.Encoding]::Unicode.GetBytes($tags.RawContent)
             $html.write($src)
 
             $rawReleases = $html.getElementsByClassName("release-entry")
         }
-        finally {
-            if (-NOT $rawReleases) {
+        finally 
+        {
+            # parses out the data needed to create the releases list
+            if (-NOT $rawReleases) 
+            {
                 $rawReleases = $html.getElementsByTagName("div") | Where-Object OuterHtml -match "release-entry"
             }
         }
@@ -437,7 +471,8 @@ function Update-Etl2Pcapng
         # get all the etl2pcapng releases
         $releases = @()
 
-        foreach ($release in ($rawReleases | Select-Object OuterHTML)) {
+        foreach ($release in ($rawReleases | Select-Object OuterHTML)) 
+        {
             # get release version
             [array]$tmpRawVer = $release.OuterHTML.Split("`n") | Where-Object { $_ -match ".zip" }
             
@@ -445,7 +480,8 @@ function Update-Etl2Pcapng
             
             [string]$tmpVer = $tmpUri.Split("/") | Where-Object { $_ -match "^v[0-9].*$" }
 
-            if ($tmpVer -match ".zip") {
+            if ($tmpVer -match ".zip") 
+            {
                 $tmpVer = $tmpVer.Replace(".zip", "")
             }
             
@@ -464,6 +500,7 @@ function Update-Etl2Pcapng
             Remove-Variable tmpRawVer, tmpVer, tmpRawTime, tmpTime, tmpUri
         }
 
+        # parse out duplicates, which happens
         $releases = $releases | Sort-Object -Property Version -Unique
 
         Write-Verbose "Update-Etl2Pcapng: Found the following releases:`n`n$($releases | Format-Table | Out-String)"
@@ -476,65 +513,70 @@ function Update-Etl2Pcapng
         # see if etl2pcapng.exe is already downloaded
         $isE2PFnd = Get-Item "$here\etl2pcapng\$arch\etl2pcapng.exe" -EA SilentlyContinue
 
-        # download if the file is missing
-        if (-NOT $isE2PFnd) {
+        # download if the etl2pcapng.exe file is missing
+        if (-NOT $isE2PFnd) 
+        {
             Write-Verbose "Update-Etl2Pcapng: etl2pcapng not found. Will download etl2pcapng."
             $download = $true
         }
         # download when a newer version is available
-        elseif ($newest.Time.Date -gt $isE2PFnd.LastWriteTime.Date) {
+        elseif ($newest.Time.Date -gt $isE2PFnd.LastWriteTime.Date) 
+        {
             # newer version online
             Write-Verbose "Update-Etl2Pcapng: A newer etl2pcapng was found. Will download the update."
             $download = $true
         }
 
-        if ($download) {
+        if ($download) 
+        {
             Write-Verbose "Update-Etl2Pcapng: Cleaning up existing files."
-            # delete existing files
+            # delete existing zip file
             $isZipFnd = Get-Item "$here\etl2pcapng.zip" -EA SilentlyContinue
             if ($isZipFnd) { Remove-Item "$here\etl2pcapng.zip" -Force | Out-Null }
             
             # make sure VC Redist is installed
             Write-Verbose "Update-Etl2Pcapng: Checking for Visual Studio C++ Redistribution install."
 
-            <# NOT WORKING?
-            $isVSSetupFnd = Get-Module -ListAvailable VSSetup
-
-            if (-NOT $isVSSetupFnd) { Install-Module VSSetup -Scope CurrentUser -Force }
-            #>
-
             # look for VS C++ 2015-2019
             $isVCRedistFnd = Find-E2PSoftware "Microsoft Visual C\+\+ 2015-2019 Redistributable \($arch\)"
 
-            if (-NOT $isVCRedistFnd) {
-                if ($arch -eq "x64") {
+            # try to download and install when missing
+            if (-NOT $isVCRedistFnd) 
+            {
+                if ($arch -eq "x64") 
+                {
                     $URI = $settings.vcredist64Uri
                 }
-                else {
+                else 
+                {
                     $URI = $settings.vcredist32Uri
                 }
 
                 Write-Verbose "Update-Etl2Pcapng: Downloading Microsoft Visual C\+\+ 2015-2019 Redistributable from $URI`."
 
                 # download vcredist
-                try {
+                try 
+                {
                     # force to TLS 1.2 and download
                     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                     Invoke-WebRequest -Uri $URI -OutFile "$here\vcredist.exe" -ErrorAction Stop
                 }
-                catch {
+                catch 
+                {
                     Write-Error "Update-Etl2Pcapng: Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`) is not installed and could not be downloaded. Please manually download and install from $URI before using etl2pcapng."
                     exit
                 }
 
                 # try to install vcredist
-                try {
+                try 
+                {
                     Push-Location $here
                     Write-Verbose "Update-Etl2Pcapng: Installing Microsoft Visual C\+\+ 2015-2019 Redistributable."
                     .\vcredist.exe /install /quiet /log "$here\Install_vc_redist_2017_x64.log"
                     Pop-Location
                 }
-                catch {
+                catch 
+                {
                     Write-Error "Update-Etl2Pcapng: Failed to install Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`). Please download from $URI and install before continuing."
                     Pop-Location
                     Remove-Item "$here\vcredist.exe" -Force | Out-Null
@@ -548,35 +590,37 @@ function Update-Etl2Pcapng
                 Write-Verbose "Update-Etl2Pcapng: VC redist installed."
             }
             
-
-
-            <#
+            
+            # remove the existing etl2pcapng
             $isDirFnd = Get-Item "$here\etl2pcapng" -EA SilentlyContinue
 
             ### There is a -Recurse bug here when using OneDrive sync'ed dirs.
             ### It is supposed to be fixed in pwsh 7, but it's not.
-            ### This should not be an issue for production since this should be run from a module, not OneDrive.
+            ### This should not be an issue for production since this should be run from a %LocalAppData%, not OneDrive.
             ### https://github.com/PowerShell/PowerShell/issues/9461
 
             if ($isDirFnd) { Remove-Item $isDirFnd.FullName -Recurse -Force -EA SilentlyContinue | Out-Null }
-            #>
 
             Write-Verbose "Update-Etl2Pcapng: Downloading etl2pcapng"
             # grab the etl2pcapng tags page from GitHub
-            try {
+            try 
+            {
                 Invoke-WebRequest -Uri $newest.URI -OutFile "$here\etl2pcapng.zip" -EA Stop
             }
-            catch {
+            catch 
+            {
                 Write-Error "Update-Etl2Pcapng: Cannot reach the etl2pcapng GitHub page: $($error[0].ToString())"
                 return $null
             }
         
             # extract and overwrite
             Write-Verbose "Update-Etl2Pcapng: Extracting the etl2pcapng archive."
-            try {
+            try 
+            {
                 Expand-Archive "$here\etl2pcapng.zip" $here -Force -EA Stop    
             }
-            catch {
+            catch 
+            {
                 Write-Error "Update-Etl2Pcapng: Could not extract etl2pcapng. Error: $($error[0].ToString())" 
                 return $null
             }
@@ -597,12 +641,14 @@ function Update-Etl2Pcapng
     $isE2PFnd = Get-Item "$here\etl2pcapng\$arch\etl2pcapng.exe" -EA SilentlyContinue
 
     
-    if ($isE2PFnd) {
+    if ($isE2PFnd) 
+    {
         Write-Verbose "Update-Etl2Pcapng: Returning etl2pcapng.exe at $here\etl2pcapng\$arch\etl2pcapng.exe"
         Write-Verbose "Update-Etl2Pcapng: Work complete."
         return ("$here\etl2pcapng\$arch\etl2pcapng.exe")
     }
-    else {
+    else 
+    {
         Write-Verbose "Update-Etl2Pcapng: Failed to find or download etl2pcapng.exe."
         Write-Verbose "Update-Etl2Pcapng: Work complete."
         return $null    
@@ -634,7 +680,8 @@ function Get-E2PSettings
     $isADP = Get-Item $setPath -ErrorAction SilentlyContinue
 
     # read the file if it exists
-    if ($isADP) {
+    if ($isADP) 
+    {
         Write-Verbose "Get-E2PSettings: Settings file found. Getting settings from file."
         # read the settings file
         $settings = Get-Content $setPath | ConvertFrom-Json
@@ -645,14 +692,17 @@ function Get-E2PSettings
 
         # create the file if it does not exist
     }
-    else {
+    else 
+    {
         # create the etl2pcapng dir
         Write-Verbose "Get-E2PSettings: Settings file not found. Using defaults."
-        try {
+        try 
+        {
             $tmpResult = New-Item "$(Split-Path $setPath -Parent)" -ItemType Directory -Force -ErrorAction Stop
             Write-Verbose $tmpResult
         }
-        catch {
+        catch 
+        {
             Write-Error "Get-E2PSettings: Unable to create settings file at $setPath`. Please try again running from an elevated prompt (Run as administrator)."
             exit
         }
@@ -664,6 +714,7 @@ function Get-E2PSettings
         Write-Verbose "Get-E2PSettings: Work complete!"
         return $defSettings
     }
+    Write-Verbose "Get-E2PSettings: Something unexpected went wrong and no settings were returned."
     Write-Verbose "Get-E2PSettings: Work complete!"
     return $null
 } #end Get-E2PSettings
@@ -681,7 +732,7 @@ function Find-E2PSoftware
 
     $apps = @()
     
-    $regPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\Wow6432node\Microsoft\Windows\CurrentVersion\Uninstall")         
+    [string[]]$regPaths = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\Wow6432node\Microsoft\Windows\CurrentVersion\Uninstall"
       
     foreach ($regPath in $regPaths) 
     { 
@@ -711,14 +762,17 @@ function Find-E2PSoftware
         {   
             Write-Verbose "Find-E2PSoftware: $($key.PSChildName)"
                 
-            if ($displayFilter) {
+            if ($displayFilter) 
+            {
                 Write-Verbose "Find-E2PSoftware: Filter $((Get-ItemProperty -Path $key.PsPath -Name DisplayName).DisplayName) match $displayFilter"
                 if ( "$((Get-ItemProperty -Path $key.PsPath -Name DisplayName).DisplayName)" -match $displayFilter) 
                 {
+                    # create the PsCustomObject that stores software details
                     $tmpObj = [pscustomobject]@{
                         Name = $key.PSChildName
                     }
         
+                    # loop through all the properties and add them to the object
                     $key.Property | ForEach-Object {
                          
                         $tmpObj | Add-Member -Name $_ -MemberType NoteProperty -Value "$((Get-ItemProperty -Path $key.PsPath -Name $_)."$_")"
@@ -752,9 +806,7 @@ function Find-E2PSoftware
 } #end Find-E2PSoftware
 
 
-
-
-
+# the list of functions the module will export.
 Export-ModuleMember -Function Register-Etl2Pcapng
 Export-ModuleMember -Function Unregister-Etl2Pcapng
 Export-ModuleMember -Function Convert-Etl2Pcapng
