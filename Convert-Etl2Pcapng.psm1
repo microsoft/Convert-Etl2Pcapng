@@ -1,7 +1,7 @@
-<#
-Copyright (c) Microsoft Corporation.
-Licensed under the MIT License.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 
+<#
 Convert-Etl2Pcapng
 
 A PowerShell wrapper for etl2pcapng, which converts packet captures 
