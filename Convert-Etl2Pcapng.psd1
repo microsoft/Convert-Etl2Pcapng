@@ -106,19 +106,19 @@ PrivateData = @{
     PSData = @{
 
         # Tags applied to this module. These help with module discovery in online galleries.
-        Tags = @('MSFTNet','etl','pcapng','packet')
+        Tags = @('MSFTNet','etl','pcapng','packet',"network","packet","trace","etl2pcapng")
 
         # A URL to the license for this module.
-        # LicenseUri = ''
+        LicenseUri = 'https://github.com/microsoft/Convert-Etl2Pcapng/blob/master/LICENSE'
 
         # A URL to the main website for this project.
-        # ProjectUri = ''
+        ProjectUri = 'https://github.com/microsoft/Convert-Etl2Pcapng'
 
         # A URL to an icon representing this module.
         # IconUri = ''
 
         # ReleaseNotes of this module
-        # ReleaseNotes = ''
+        ReleaseNotes = 'Initial release of Convert-Etl2Pcapng.'
 
         # Prerelease string of this module
         # Prerelease = ''
