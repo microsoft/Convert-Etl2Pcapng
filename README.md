@@ -8,6 +8,23 @@ The ETL file format cannot be natively opened by any currently supported Microso
 
 etl2pcapng was built to extract packets out of ETL files and convert them to a Wireshark readable format, pcapng. This PowerShell wrapper extends the functionality of, and provides automated management and updates for, etl2pcapng.exe.
 
+# Install
+
+The module can be downloaded using the following command in PowerShell.
+
+`Install-Module Convert-Etl2Pcapng`
+
+Use this command to install without any prompts, assuming you accept the MIT license used.
+
+`Install-Module Convert-Etl2Pcapng -Force -AcceptLicense`
+
+It is possible that a new version of PowerShellGet will be needed before the install will work. Use this command to update PowerShellGet.
+
+`Install-Module PowerShellGet -Force`
+
+
+# Usage
+
 ### Convert-Etl2Pcapng
 
 Used to automate etl2pcapng conversion. Accepts a literal path to a location containing ETL files or the literal path to a single ETL file. Paths from the pipeline are accepted.
