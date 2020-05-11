@@ -114,15 +114,15 @@ function Register-Etl2Pcapng
 
     if ($UseVerbose) 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng %1 -Verbose'
+        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Verbose'
     }
     elseif ($UseDebug) 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng %1 -Debug'
+        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug'
     }
     else 
     {
-        $cmd = 'cmd /c powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng %1'
+        $cmd = 'cmd /c powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'''
     }
 
 
