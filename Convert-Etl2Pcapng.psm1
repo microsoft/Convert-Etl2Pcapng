@@ -103,14 +103,15 @@ function Register-Etl2Pcapng
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
     }
 
-    #### NEED TO CLEAN THIS UP IN THE FUTURE ####
     # create the shell extension for etl2pcapng
-    Write-Verbose "Register-Etl2Pcapng: Add the Convert-Etl2Pcapng app in HKCR."
-    if (-NOT (New-RegKey "HKCR:\Convert-Etl2Pcapng\Shell\CONVERT\Command" Directory)) { Write-Error "Could not write reg 1."; exit }
+    Write-Verbose "Register-Etl2Pcapng: Add the Convert-Etl2Pcapng app to HKCR:\SystemFileAssociations\.etl to prevent possible conflicts."
+
+    $rootPath = "HKCR:\SystemFileAssociations\.etl\shell\Convert-Etl2Pcapng"
+    if (-NOT (New-RegKey "$rootPath\Command" Directory)) { Write-Error "Could not create directory in SystemFileAssociations."; exit }
 
     # create the command
-    Write-Verbose "Register-Etl2Pcapng: Configure Convert-ETL2PCAPNG."
-    if (-NOT (New-RegKey "HKCR:\Convert-Etl2Pcapng\Shell\CONVERT" -value "Convert with etl2pcapng")) { Write-Error "Could not write reg 2."; exit }
+    Write-Verbose "Register-Etl2Pcapng: Configure Convert-Etl2Pcapng."
+    if (-NOT (New-RegKey $rootPath -value "Convert with etl2pcapng")) { Write-Error "Could not write menu text." }
 
     if ($UseVerbose) 
     {
@@ -125,15 +126,11 @@ function Register-Etl2Pcapng
         $cmd = 'cmd /c powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'''
     }
 
-
-    if (-NOT (New-RegKey "HKCR:\Convert-Etl2Pcapng\Shell\CONVERT\Command" -Value $cmd)) { Write-Error "Could not write reg 3."; exit }
-
+    Write-Verbose "Register-Etl2Pcapng: Add Convert-ETL2PCAPNG command: $cmd"
+    if (-NOT (New-RegKey "$rootPath\Command" -Value $cmd)) { Write-Error "Could not write command to registry."; exit }
 
     # check for the ETL extenstion in HKCR, create if missing
     Write-Verbose "Register-Etl2Pcapng: Add the context item to .etl files."
-    if (-NOT (New-RegKey "HKCR:\.etl" Directory)) { Write-Error "Could not write reg 4."; exit }
-
-    if (-NOT (New-RegKey "HKCR:\.etl" -Value 'Convert-Etl2Pcapng')) { Write-Error "Could not write reg 5."; exit }
 
     Write-Verbose "Register-Etl2Pcapng: Work complete!"
 } #end Register-Etl2Pcapng
@@ -180,19 +177,59 @@ function Unregister-Etl2Pcapng
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
     }
 
+    # check if the original version was registered and remove its components
     # remove the Convert-ETL2PCAPNG HKCR key
-    Write-Verbose "Unregister-Etl2Pcapng: Removing Convert-Etl2Pcapng HKCR app."
-    Remove-Item "HKCR:\Convert-Etl2Pcapng" -Recurse -Force -EA SilentlyContinue
+    $test = Get-Item "HKCR:\Convert-Etl2Pcapng" -EA SilentlyContinue
+    if ($test)
+    {
+        Write-Verbose "Unregister-Etl2Pcapng: Removing Convert-Etl2Pcapng HKCR app."
+        Remove-Item "HKCR:\Convert-Etl2Pcapng" -Recurse -Force -EA SilentlyContinue
+    }
 
-    # remove the default to .etl, but don't delete it
-    Write-Verbose "Unregister-Etl2Pcapng: Cleanup .etl extension option."
-    Set-ItemProperty -LiteralPath "HKCR:\.etl" -Name '(Default)' -Value "" -Force -EA SilentlyContinue
+    $isOld = Get-ItemProperty -LiteralPath "HKCR:\.etl" -Name '(Default)' -EA SilentlyContinue
+    if ($isOld.'(default)' -eq 'Convert-Etl2Pcapng')
+    {
+        # remove the default to .etl, but don't delete it
+        Write-Verbose "Unregister-Etl2Pcapng: Cleanup .etl extension option."
+        Set-ItemProperty -LiteralPath "HKCR:\.etl" -Name '(Default)' -Value "" -Force -EA SilentlyContinue
+    }
+
+    $test = Get-ItemProperty -LiteralPath "HKCR:\.etl" -Name 'Convert-Etl2Pcapng' -EA SilentlyContinue
+    if ( $test )
+    {
+        Remove-ItemProperty -LiteralPath "HKCR:\.etl" -Name 'Convert-Etl2Pcapng' -Force 
+    }
+
+    # remove the SystemFileAssociation
+    $rootPath = "HKCR:\SystemFileAssociations\.etl\shell\Convert-Etl2Pcapng"
+    $testNew = Get-Item $rootPath -EA SilentlyContinue
+
+    if ($testNew)
+    {
+        try 
+        {
+            Remove-Item $rootPath -Recurse -Force -ErrorAction Stop    
+        }
+        catch 
+        {
+            Write-Error "Unregister-Etl2Pcapng: Failed to cleanup the SystemFileAssociations."
+        }
+        
+    }
+    
 
     # clean up the user folder
+    Write-Verbose "Unregister-Etl2Pcapng: Cleaning up LocalAppData directory."
     $settings = Get-E2PSettings
-    Remove-Item $settings.appDataPath -Force -Recurse -EA SilentlyContinue | Out-Null
-
-
+    try 
+    {
+        Remove-Item $settings.appDataPath -Force -Recurse -EA Stop    
+    }
+    catch 
+    {
+        Write-Error "Unregister-Etl2Pcapng: Failed to cleanup the LocalAppData: $($settings.appDataPath)"
+    }
+    
     Write-Verbose "Unregister-Etl2Pcapng: Work complete!"
 } #end Unregister-Etl2Pcapng
 
@@ -752,7 +789,7 @@ function Find-E2PSoftware
         }
         catch 
         { 
-            Write-Debug "Find-E2PSoftware: Could not find the path: $_ "
+            Write-Debug "Find-E2PSoftware: Could not find the path: $_ `n`n $reg "
             continue 
         } 
       
