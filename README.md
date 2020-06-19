@@ -20,9 +20,15 @@ Use this command to install without any prompts, assuming you accept the MIT lic
 
 It is possible that a new version of PowerShellGet will be needed before the module will install from PSGallery. Run these three commands to update all the necessary components, restart PowerShell, and then try to install Convert-Etl2Pcapng again.
 
+    # Make sure all other instances of PowerShell, including VS Code, PowerShell IDE, etc. are closed
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
-    Install-Module -Name PowerShellGet -MinimumVersion 2.2.4.1 -Force
     Install-Module -Name PackageManagement -Force -MinimumVersion 1.4.6 -AllowClobber
+    
+    # A restart of PowerShell may be needed
+    Install-Module -Name PowerShellGet -MinimumVersion 2.2.4.1 -Force
+    
+    # A restart of PowerShell is required if the module was updated
+    
 
 
 # Usage
