@@ -22,10 +22,7 @@ It is possible that a new version of PowerShellGet will be needed before the mod
 
     # Make sure all other instances of PowerShell, including VS Code, PowerShell IDE, etc. are closed
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
-    Install-Module -Name PackageManagement -Force -MinimumVersion 1.4.6 -AllowClobber
-    
-    # A restart of PowerShell may be needed
-    Install-Module -Name PowerShellGet -MinimumVersion 2.2.4.1 -Force
+    Install-Module -Name PowerShellGet -MinimumVersion 2.2.4.1 -Force -AllowClobber
     
     # A restart of PowerShell is required if the module was updated
     
