@@ -38,7 +38,7 @@ Author = 'James Kehr'
 CompanyName = 'Microsoft'
 
 # Copyright statement for this module
-Copyright = '(c) 2020 Microsoft. All rights reserved.'
+Copyright = '(c) 2021 Microsoft. All rights reserved.'
 
 # Description of the functionality provided by this module
 Description = 'Manages etl2pcapng.exe and provides a PowerShell wrapper for the executable.'
@@ -124,7 +124,7 @@ PrivateData = @{
         # Prerelease = ''
 
         # Flag to indicate whether the module requires explicit user acceptance for install/update/save
-        RequireLicenseAcceptance = $true
+        RequireLicenseAcceptance = $false
 
         # External dependent modules of this module
         # ExternalModuleDependencies = @()
