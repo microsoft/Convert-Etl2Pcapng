@@ -68,6 +68,21 @@ The easiest way to cleanup old versions is to close everything PowerShell relate
 
 `$env:PSModulePath -split ";"`
 
+
+# Known issues
+
+- There will be three errors the first time \[Update|Register|Convert\]-Etl2Pcapng is run. The errors will go away during subsequent launches. This error is under investigation.
+- Windows PowerShell 5 users who have redirected their Documents folder to a cloud provider (i.e. OneDrive) may get the error below. This does not impact usage and is under investigation.
+
+```
+Remove-Item : Access to the cloud file is denied
+At C:\Users\<username>\OneDrive\Documents\WindowsPowerShell\Modules\Convert-Etl2Pcapng\2021.3.18\Convert-Etl2Pcapng.psm1:565 char:30
++ ... isDirFnd) { Remove-Item $isDirFnd.FullName -Recurse -Force -EA Silent ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Remove-Item], Win32Exception
+    + FullyQualifiedErrorId : System.ComponentModel.Win32Exception,Microsoft.PowerShell.Commands.RemoveItemCommand
+```
+
 # Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
