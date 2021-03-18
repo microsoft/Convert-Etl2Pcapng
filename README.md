@@ -12,20 +12,21 @@ etl2pcapng was built to extract packets out of ETL files and convert them to a W
 
 The module can be downloaded using the following command in PowerShell.
 
-`Install-Module Convert-Etl2Pcapng`
+`Install-Module Convert-Etl2Pcapng -Scope CurrentUser`
 
 Use this command to install without any prompts, assuming you accept the MIT license used.
 
-`Install-Module Convert-Etl2Pcapng -Force -AcceptLicense`
+`Install-Module Convert-Etl2Pcapng -Scope CurrentUser -Force`
 
 It is possible that a new version of PowerShellGet will be needed before the module will install from PSGallery. Run these three commands to update all the necessary components, restart PowerShell, and then try to install Convert-Etl2Pcapng again.
 
+```
     # Make sure all other instances of PowerShell, including VS Code, PowerShell IDE, etc. are closed
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
     Install-Module -Name PowerShellGet -MinimumVersion 2.2.4.1 -Force -AllowClobber
     
     # A restart of PowerShell is required if the module was updated
-    
+ ```
 
 
 # Usage
@@ -60,6 +61,12 @@ GitHub is only queried every 7 days or when the Force parameter is used.
 
 The module files, including etl2pcapng, are stored in %LocalAppData%\etl2pcapng so an elevated prompt is not needed to execute the commands.
 
+
+# Cleaning up old versions
+
+The easiest way to cleanup old versions is to close everything PowerShell related (consoles, VSCode, PowerShell ISE, etc.), and then navigate to the various module paths and delete the Convert-Etl2Pcapng folders. The quick way to find all the directories is to run this command in PowerShell and PowerShell 6/7 (if installed).
+
+`$env:PSModulePath -split ";"`
 
 # Contributing
 
