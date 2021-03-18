@@ -72,7 +72,7 @@ The easiest way to cleanup old versions is to close everything PowerShell relate
 # Known issues
 
 - There will be three errors the first time \[Update|Register|Convert\]-Etl2Pcapng is run. The errors will go away during subsequent launches. This error is under investigation.
-- Windows PowerShell 5 users who have redirected their Documents folder to a cloud provider (i.e. OneDrive) may get the error below. This does not impact usage and is under investigation.
+- Windows PowerShell 5 users who have redirected their Documents folder to a cloud provider (i.e. OneDrive) may get the error below when etl2pcapng.exe is updated. This does not impact usage and is under investigation.
 
 ```
 Remove-Item : Access to the cloud file is denied
