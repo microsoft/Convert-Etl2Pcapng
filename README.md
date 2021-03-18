@@ -83,6 +83,13 @@ At C:\Users\<username>\OneDrive\Documents\WindowsPowerShell\Modules\Convert-Etl2
     + FullyQualifiedErrorId : System.ComponentModel.Win32Exception,Microsoft.PowerShell.Commands.RemoveItemCommand
 ```
 
+# Privacy
+
+This PowerShell module does not collect or upload data. 
+
+Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
+
+
 # Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
