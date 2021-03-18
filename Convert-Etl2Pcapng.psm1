@@ -441,7 +441,7 @@ function Update-Etl2Pcapng
      # Check for etl2pcapng updates only once a week
      #
      # The last time an update was checked for is located
-     # in the module directory under settings.json.
+     # in the module directory under settings.xml.
      #
      # The -Force param causes an etl2pcapng update check regardless of the last date checked.
      #
@@ -461,7 +461,7 @@ function Update-Etl2Pcapng
 
     Write-Verbose "Update-Etl2Pcapng - OS architecture is $arch."
 
-    # read settings.json
+    # read settings.xml
     $settings = Get-E2PSettings
 
     Write-Verbose "Update-Etl2Pcapng - Settings:`n`n$($settings | Format-List | Out-String)`n`n"
@@ -475,109 +475,22 @@ function Update-Etl2Pcapng
     if ($Force -or ((Get-Date).Date.AddDays(-7) -gt $settings.LastUpdate.Date)) 
     {
         Write-Verbose "Update-Etl2Pcapng - Checking for an update to etl2pcapng."
-        # controls whether a download of etl2pcapng.exe is needed
-        $download = $false
 
-        Write-Verbose "Update-Etl2Pcapng - Getting etl2pcapng releases from GitGub."
-        $tagsUri = 'https://github.com/microsoft/etl2pcapng/releases' 
+        Write-Verbose "Update-Etl2Pcapng - Getting etl2pcapng releases from GitGub."        
+        $repo = 'microsoft/etl2pcapng' 
 
-        # grab the etl2pcapng releases page from GitHub
-        try 
+        try
         {
-            $tags = Invoke-WebRequest -Uri $tagsUri -EA Stop
+            $latest = Find-GitReleaseLatest $repo -EA Stop            
         }
-        catch 
+        catch
         {
-            return (Write-Error "Update-Etl2Pcapng - Cannot reach the etl2pcapng GitHub page: $_" -EA Stop)            
+            return (Write-Error "Failed to retrieve the latest release from repo: $repo" -EA Stop)
         }
+        
+        Write-Verbose "Update-Etl2Pcapng - The latest release is:`n`n$($latest | Format-Table | Out-String)"
 
-        # parse the HTML content
-        $HTML = New-Object -Com "HTMLFile"
-
-        # this manages parsing the HTML based on a variety of conditions
-        try 
-        {
-            # works with Win PoSh
-            $html.IHTMLDocument2_write($tags.Content)
-        }
-        catch 
-        {
-            # works with pwsh7
-            $src = [System.Text.Encoding]::Unicode.GetBytes($tags.RawContent)
-            $html.write($src)
-
-            $rawReleases = $html.getElementsByClassName("release-entry")
-        }
-        finally 
-        {
-            # parses out the data needed to create the releases list
-            if (-NOT $rawReleases) 
-            {
-                $rawReleases = $html.getElementsByTagName("div") | Where-Object OuterHtml -match "release-entry"
-            }
-        }
-
-
-        # get all the etl2pcapng releases
-        $releases = @()
-
-        foreach ($release in ($rawReleases | Select-Object OuterHTML)) 
-        {
-            # get release version
-            [array]$tmpRawVer = $release.OuterHTML.Split("`n") | Where-Object { $_ -match ".zip" }
-            
-            [string]$tmpUri = $tmpRawVer[0].Split(" ") | Where-Object { $_ -match "href=" } | ForEach-Object { $_.Split('"')[1] }
-            
-            [string]$tmpVer = $tmpUri.Split("/") | Where-Object { $_ -match "^v[0-9].*$" }
-
-            if ($tmpVer -match ".zip") 
-            {
-                $tmpVer = $tmpVer.Replace(".zip", "")
-            }
-            
-            # get release time
-            [array]$tmpRawTime = $release.OuterHTML.Split("`n") | Where-Object { $_ -match "datetime=" }
-            [datetime]$tmpTime = $tmpRawTime[0].Split('<').Split('>').Split(" ") | Where-Object { $_ -match "datetime" } | ForEach-Object { $_.Split('"')[1] }
-
-            
-            $releases += [PSCustomObject]@{
-                Version = $tmpVer
-                URI     = "https://github.com$tmpUri"
-                Time    = $tmpTime
-            }
-
-
-            Remove-Variable tmpRawVer, tmpVer, tmpRawTime, tmpTime, tmpUri
-        }
-
-        # parse out duplicates, which happens
-        $releases = $releases | Sort-Object -Property Version -Unique
-
-        Write-Verbose "Update-Etl2Pcapng - Found the following releases:`n`n$($releases | Format-Table | Out-String)"
-
-        # find the newest release
-        $newest = ($releases | Sort-Object -Property Time -Descending)[0]
-
-        Write-Verbose "Update-Etl2Pcapng - Detected newest release: $($newest.Version)"
-
-        # see if etl2pcapng.exe is already downloaded
-        $isE2PFnd = Get-Item "$here\etl2pcapng\$arch\etl2pcapng.exe" -EA SilentlyContinue
-
-        # download if the etl2pcapng.exe file is missing
-        if (-NOT $isE2PFnd) 
-        {
-            Write-Verbose "Update-Etl2Pcapng - etl2pcapng not found. Will download etl2pcapng."
-            $download = $true
-        }
-        # download when a newer version is available
-        elseif ($newest.Time.Date -gt $isE2PFnd.LastWriteTime.Date) 
-        {
-            # newer version online
-            Write-Verbose "Update-Etl2Pcapng - A newer etl2pcapng was found. Will download the update."
-            $download = $true
-        }
-
-        if ($download) 
+        if ($latest.Version -gt $settings.CurrVersion) 
         {
             Write-Verbose "Update-Etl2Pcapng - Cleaning up existing files."
             # delete existing zip file
@@ -587,11 +500,12 @@ function Update-Etl2Pcapng
             # make sure VC Redist is installed
             Write-Verbose "Update-Etl2Pcapng - Checking for Visual Studio C++ Redistribution install."
 
-            # look for VS C++ 2015-2019
+            <# 
+            # vcdist no longer needed as of version 1.5.0
+            #look for VS C++ 2015-2019
             $isVCRedistFnd = Find-E2PSoftware "Microsoft Visual C\+\+ 2015-2019 Redistributable \($arch\)"
-
-            # try to download and install when missing
-            if (-NOT $isVCRedistFnd) 
+            
+            if (-NOT $isVCRedistFnd -and ()) 
             {
                 if ($arch -eq "x64") 
                 {
@@ -607,14 +521,11 @@ function Update-Etl2Pcapng
                 # download vcredist
                 try 
                 {
-                    # force to TLS 1.2 and download
-                    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                    Invoke-WebRequest -Uri $URI -OutFile "$here\vcredist.exe" -ErrorAction Stop
+                    $dl = Get-WebFile -Uri $URI -savePath "$here" -fileName "vcredist.exe" -EA Stop
                 }
                 catch 
                 {
-                    Write-Error "Update-Etl2Pcapng - Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`) is not installed and could not be downloaded. Please manually download and install from $URI before using etl2pcapng."
-                    exit
+                    return (Write-Error "Update-Etl2Pcapng - Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`) is not installed and could not be downloaded. Please manually download and install from $URI before using etl2pcapng. Error: $_" -EA Stop)
                 }
 
                 # try to install vcredist
@@ -623,22 +534,24 @@ function Update-Etl2Pcapng
                     Push-Location $here
                     Write-Verbose "Update-Etl2Pcapng - Installing Microsoft Visual C\+\+ 2015-2019 Redistributable."
                     .\vcredist.exe /install /quiet /log "$here\Install_vc_redist_2017_x64.log"
-                    Pop-Location
                 }
                 catch 
                 {
-                    Write-Error "Update-Etl2Pcapng - Failed to install Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`). Please download from $URI and install before continuing."
+                    return (Write-Error "Update-Etl2Pcapng - Failed to install Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`). Please download from $URI and install before continuing." -EA Stop)
+                }
+                finally
+                {
+                    # cleanup
                     Pop-Location
-                    Remove-Item "$here\vcredist.exe" -Force | Out-Null
-                    exit
+                    Start-Sleep 1
+                    Remove-Item "$here\vcredist.exe" -Force -EA SilentlyContinue | Out-Null
                 }
 
-                # cleanup
-                Start-Sleep 1
-                Remove-Item "$here\vcredist.exe" -Force | Out-Null
-                Remove-Item "$here\Install*.log" -Force | Out-Null
+                # only cleanup the log file if the install succeeds and we don't need it
+                Remove-Item "$here\Install*.log" -Force -EA SilentlyContinue | Out-Null
                 Write-Verbose "Update-Etl2Pcapng - VC redist installed."
             }
+            #>
             
             
             # remove the existing etl2pcapng
@@ -655,36 +568,41 @@ function Update-Etl2Pcapng
             # grab the etl2pcapng tags page from GitHub
             try 
             {
-                Invoke-WebRequest -Uri $newest.URI -OutFile "$here\etl2pcapng.zip" -EA Stop
+                $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here" -fileName "etl2pcapng.zip" -EA Stop
             }
             catch 
             {
-                Write-Error "Update-Etl2Pcapng - Cannot reach the etl2pcapng GitHub page: $($error[0].ToString())"
-                return $null
+                return (Write-Error "Update-Etl2Pcapng - Cannot reach the etl2pcapng GitHub page: $_" -EA Stop)
             }
         
             # extract and overwrite
             Write-Verbose "Update-Etl2Pcapng - Extracting the etl2pcapng archive."
             try 
             {
-                Expand-Archive "$here\etl2pcapng.zip" $here -Force -EA Stop    
+                Expand-Archive "$e2pPath" $here -Force -EA Stop    
             }
             catch 
             {
-                Write-Error "Update-Etl2Pcapng - Could not extract etl2pcapng. Error: $($error[0].ToString())" 
-                return $null
+                return (Write-Error "Update-Etl2Pcapng - Could not extract etl2pcapng. Error: $_" -EA Stop)
             }
             
             # cleanup the zip
             Write-Verbose "Update-Etl2Pcapng - Cleaning up the zip file."
-            $isZipFnd = Get-Item "$here\etl2pcapng.zip" -EA SilentlyContinue
-            if ($isZipFnd) { Remove-Item "$here\etl2pcapng.zip" -Force -EA SilentlyContinue | Out-Null }
+            $isZipFnd = Get-Item "$e2pPath" -EA SilentlyContinue
+            if ($isZipFnd) { Remove-Item "$e2pPath" -Force -EA SilentlyContinue | Out-Null }
+
+            # update the installed version
+            Write-Verbose "Update-Etl2Pcapng - Updating version in settings to $($latest.Version)"
+            $settings.SetCurrVersion(($latest.Version))
         }
 
         # update Settings.LastUpdate
-        Write-Verbose "Update-Etl2Pcapng -  Updating LastUpdate in settings."
-        $settings.LastUpdate = (Get-Date).Date.ToUniversalTime()
-        $settings | ConvertTo-Json | Out-File "$here\settings.json" -Force -Encoding utf8
+        $updateTime = (Get-Date).Date.ToUniversalTime()
+        Write-Verbose "Update-Etl2Pcapng - Updating last update check in settings to $($updateTime.ToString())"
+        $settings.SetLastUpdate($updateTime)
+        
+        Write-Verbose "Update-Etl2Pcapng - Saving E2P settings changes."
+        Set-E2PSettings $settings
     }
 
     
@@ -724,27 +642,7 @@ function Get-E2PSettings
 {
     Write-Verbose "Get-E2PSettings - Starting"
 
-    $mods = Get-Module -ListAvailable Convert-Etl2Pcapng
-
-    if ($mods -is [array])
-    {
-        # look for the current user module
-
-    }
-
-    $here = Split-Path -Parent (Get-Module -ListAvailable Convert-Etl2Pcapng).Path
-
-    ### Redist URLs are found here: https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads
-    ### [datetime]::FromFileTimeUtc(0) sets the date to 1 Jan 1601 00:00, the first day of the Gregorian calendar. ###
-    # create default settings
-    $defSettings = [PSCustomObject]@{
-        LastUpdate    = [datetime]::FromFileTimeUtc(0)
-        vcredist64Uri = 'https://aka.ms/vs/16/release/vc_redist.x64.exe'
-        vcredist32Uri = 'https://aka.ms/vs/16/release/vc_redist.x86.exe'
-        appDataPath   = "$here"
-    }
-
-    $setPath = "$($defSettings.appDataPath)\settings.json"
+    $setPath = "$(Find-E2PPath)\settings.xml"
 
     # is there a settings file at the appDataPath location?
     $isADP = Get-Item $setPath -ErrorAction SilentlyContinue
@@ -754,7 +652,15 @@ function Get-E2PSettings
     {
         Write-Verbose "Get-E2PSettings - Settings file found. Getting settings from file."
         # read the settings file
-        $settings = Get-Content $setPath | ConvertFrom-Json
+        try 
+        {
+            $settings = [E2PSettings]::New((Import-Clixml "$setPath"))    
+        }
+        catch 
+        {
+            return (Write-Error "Failed to import settings: $_" -EA Stop)
+        }
+        
 
         # return the settings
         Write-Verbose "Get-E2PSettings - Work complete!"
@@ -766,28 +672,94 @@ function Get-E2PSettings
     {
         # create the etl2pcapng dir
         Write-Verbose "Get-E2PSettings - Settings file not found. Using defaults."
-        try 
-        {
-            $tmpResult = New-Item "$(Split-Path $setPath -Parent)" -ItemType Directory -Force -ErrorAction Stop
-            Write-Verbose $tmpResult
-        }
-        catch 
-        {
-            return (Write-Error "Get-E2PSettings - Unable to create settings file at $setPath`. Please try again running from an elevated prompt (Run as administrator). Or install the module under the current user context: Install-Module Convert-Etl2Pcapng -Force -Scope CurrentUser" -EA Stop)
-        }
+        $settings = New-E2PSetting
 
         # write the settings JSON file
-        $defSettings | ConvertTo-Json | Out-File $setPath -Force -Encoding utf8
+        Set-E2PSettings $settings
         
         # return default settings
         Write-Verbose "Get-E2PSettings - Work complete!"
-        return $defSettings
+        return $settings
     }
     Write-Verbose "Get-E2PSettings - Something unexpected went wrong and no settings were returned."
     Write-Verbose "Get-E2PSettings - Work complete!"
     return $null
 } #end Get-E2PSettings
 
+
+# FUNCTION : Set-E2PSettings
+# PURPOSE  : Updates E2P settings
+function Set-E2PSettings
+{
+    [CmdletBinding()]
+    param (
+        [PSCustomObject]$settings
+    )
+
+    try 
+    {
+        $settings.Save("$($settings.appDataPath)\settings.xml")
+    }
+    catch 
+    {
+        return (Write-Error "Failed to write settings.xml to $($settings.appDataPath): $_" -EA Stop)
+    }
+
+    return $null
+}
+
+
+function New-E2PSetting
+{
+    [string]$here = Find-E2PPath
+
+    # create default settings
+    $defSettings = [E2PSettings]::New($here)
+        
+    return $defSettings
+}
+
+
+function Find-E2PPath
+{
+    # first try to get the module in use
+    $mods = Get-Module Convert-Etl2Pcapng -EA SilentlyContinue
+    
+    # the backup plan
+    if (-NOT $mods)
+    {
+        $mods = Get-Module -ListAvailable Convert-Etl2Pcapng
+
+        if ($mods -is [array])
+        {
+            # look for the current user module
+            if ($PSHost.Version.Major -ge 6)
+            {
+                $here = Split-Path -Parent ($mods | Where-Object Path -match "^.*(?:$env:UserName).*(?!:WindowsPowerShell)").Path
+            }
+            else 
+            {
+                $here = Split-Path -Parent ($mods | Where-Object Path -match "^.*(?:$env:UserName).*(?:WindowsPowerShell)").Path
+            }
+
+            # if that failed, pick the first item on the list and use that
+            if (-NOT $here)
+            {
+                $here = Split-Path -Parent $mods[0].Path
+            }
+        }
+        else
+        {
+            $here = Split-Path -Parent $mods.Path
+        }
+    }
+    else
+    {
+        $here = Split-Path -Parent $mods.Path
+    }
+
+    return $here
+}
 
 
 # FUNCTION: Get-WebFile
@@ -982,6 +954,119 @@ function Find-E2PSoftware
     Write-Verbose "Find-E2PSoftware: Work complete!"
     return $apps     
 } #end Find-E2PSoftware
+
+
+class E2PSettings
+{
+    [datetime]$LastUpdate
+    [version]$CurrVersion
+    [string]$appDataPath
+
+    #region construtors
+    E2PSettings()
+    {
+        $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
+        $this.CurrVersion   = [version]::new()
+        $this.appDataPath   = $null
+    }
+
+    E2PSettings([string]$path)
+    {
+        $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
+        $this.CurrVersion   = [version]::new()
+        $this.appDataPath   = $path
+    }
+
+    E2PSettings([PSCustomObject]$set)
+    {
+        $this.LastUpdate    = $set.LastUpdate
+        $this.CurrVersion   = $set.CurrVersion
+        $this.appDataPath   = $set.appDataPath
+    }
+    #endregion construtors
+
+    #region getters
+    [datetime]GetLastUpdate()
+    {
+        return ($this.LastUpdate)
+    }
+
+    [version]GetCurrVersion()
+    {
+        return ($this.CurrVersion)
+    }
+
+    [string]GetAppDataPath()
+    {
+        return ($this.appDataPath)
+    }
+    #endregion getters
+
+
+    #region setters
+    SetLastUpdate([datetime]$LastUpdate)
+    {
+        $this.LastUpdate = $LastUpdate
+    }
+
+    SetCurrVersion([version]$CurrVersion)
+    {
+        $this.CurrVersion = $CurrVersion
+    }
+
+    SetAppDataPath([string]$appDataPath)
+    {
+        $this.appDataPath = $appDataPath
+    }
+    #endregion setters
+
+
+    #region methods
+    [string]ToString()
+    {
+        return (@"
+LastUpdate  : $($this.appDataPath)
+CurrVersion : $($this.CurrVersion)
+appDataPath : $($this.appDataPath)
+"@)
+    }
+
+    # by returning an ErrorRecord the Save method can create a terminating error in a caller using a try-catch
+    [System.Management.Automation.ErrorRecord]
+    Save($Filename)
+    {
+        # convert the filename to a string if we get a filesystem object from something like Get-Item
+        if ($Filename -is [System.IO.FileSystemInfo])
+        {
+            $Filename = $Filename.Fullname
+        }
+
+        # make sure the file is valid
+        if (-NOT (Test-Path "$Filename" -IsValid))
+        {
+            # return a terminating error
+            return (Write-Error "[E2PSettings].Save - The filename is invalid: $Filename" -EA Stop)
+        }
+
+        # no check if the file exists. This function explicitly overwrites the existing content
+
+        try 
+        {
+            $this | Export-Clixml -Path "$Filename" -Depth 20 -Encoding utf8 -Force -EA Stop
+        }
+        catch 
+        {
+            # return a terminating error
+            return (Write-Error "[E2PSettings].Save - Could not save the settings file: $_" -EA Stop)
+        }
+
+        # return a nonterminating null
+        return $null
+    }
+
+    #endregion methods
+}
+
 
 
 #endregion AUX
