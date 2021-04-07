@@ -64,28 +64,67 @@ The module files, including etl2pcapng, are stored in %LocalAppData%\etl2pcapng 
 
 # Cleaning up old versions
 
-The easiest way to cleanup old versions is to close everything PowerShell related (consoles, VSCode, PowerShell ISE, etc.), and then navigate to the various module paths and delete the Convert-Etl2Pcapng folders. The quick way to find all the directories is to run this command in PowerShell and PowerShell 6/7 (if installed).
+These commands should cleanup all Convert-Etl2Pcapng modules and files.
 
-`$env:PSModulePath -split ";"`
+```
+# cleanup old versions of Convert-Etl2Pcapng
+Get-Module -ListAvailable Convert-Etl2Pcapng | Uninstall-Module -Force
+
+# OneDrive safe cleanup method
+$modPaths = $env:PSModulePath -split ';'
+
+foreach ($path in $modPaths)
+{
+    $isC2PFnd = Get-Item "$path\Convert-Etl2Pcapng" -EA SilentlyContinue
+
+    if ($isC2PFnd)
+    {
+        # first delete all the files    
+        $childs = Get-ChildItem -LiteralPath "$($isC2PFnd.FullName)" -Recurse -Force -File
+        foreach ($child in $childs) 
+        {
+            $child.Delete()
+        }
+
+        # take a nap while OneDrive catches up
+        sleep 5
+
+        # now get the directories
+        $childs = Get-ChildItem -LiteralPath "$($isC2PFnd.FullName)" -Recurse -Force
+        foreach ($child in $childs) 
+        {
+            $child.Delete()
+        }
+
+        # take a nap while OneDrive catches up
+        sleep 5
+
+        # finally nuke the root dir
+        $isC2PFnd.Delete($true)
+    }
+}
+```
+
+Rerun the `# OneDrive safe cleanup method` portion of the commands a second time if you get errors during the initial execution. OneDrive and PowerShell don't always play nice with each other.
+
+If all else fails then go in and delete the modules manually.
 
 
 # Known issues
 
-- There will be three errors the first time \[Update|Register|Convert\]-Etl2Pcapng is run. The errors will go away during subsequent launches. This error is under investigation.
-- Windows PowerShell 5 users who have redirected their Documents folder to a cloud provider (i.e. OneDrive) may get the error below when etl2pcapng.exe is updated. This does not impact usage and is under investigation.
+All known breaking errors have been fixed. Please post an Issue if you find one. You can enter debug mode for the shell menu by registering using this command.
 
 ```
-Remove-Item : Access to the cloud file is denied
-At C:\Users\<username>\OneDrive\Documents\WindowsPowerShell\Modules\Convert-Etl2Pcapng\2021.3.18\Convert-Etl2Pcapng.psm1:565 char:30
-+ ... isDirFnd) { Remove-Item $isDirFnd.FullName -Recurse -Force -EA Silent ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (:) [Remove-Item], Win32Exception
-    + FullyQualifiedErrorId : System.ComponentModel.Win32Exception,Microsoft.PowerShell.Commands.RemoveItemCommand
+Register-Etl2Pcapng -UseDebug
 ```
+
+All cmdlets also support -Verbose and file redirection for troubleshooting.
+
+
 
 # Privacy
 
-This PowerShell module does not collect or upload data. 
+This PowerShell module does not collect or upload data to Microsoft, third-parties, or partners. 
 
 Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
 
