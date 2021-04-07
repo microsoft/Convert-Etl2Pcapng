@@ -46,44 +46,6 @@ function Register-Etl2Pcapng
         [switch]$UseDebug
     )
 
-    function New-RegKey 
-    {
-        [CmdletBinding()]
-        param(
-            [string]$path,
-            [string]$type,
-            $value
-        )
-
-        Write-Verbose "New-RegKey: Starting"
-        # make sure the PSDrive to HKCR is created
-        if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
-        {
-            New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
-        }
-
-        # do the reg work
-        try 
-        {
-            Write-Verbose "New-RegKey: Creating key $path"
-            if ($type -eq "Directory") {
-                New-Item $path -ItemType $type -Force -EA SilentlyContinue | Out-Null
-            }
-            else {
-                Write-Verbose "New-RegKey: Setting property on $path to $value"
-                Set-ItemProperty -LiteralPath $path -Name '(Default)' -Value $value -Force -EA SilentlyContinue | Out-Null
-            }
-        }
-        catch 
-        {
-            Write-Error "New-RegKey: Failed to create $path."
-            return $false
-        }
-
-        Write-Verbose "New-RegKey: Work complete!"
-        return $true
-    }
-
     Write-Verbose "Register-Etl2Pcapng: Work! Work!"
 
     # test for Admin access
@@ -99,8 +61,7 @@ function Register-Etl2Pcapng
     $isModFnd = Get-Module -ListAvailable Convert-ETL2PCAPNG -EA SilentlyContinue
 
     if (-NOT $isModFnd) {
-        Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG."
-        return $null
+        return (Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG." -EA Stop)
     }
 
     # create a PSDrive to HKEY_CLASSES_ROOT
@@ -464,7 +425,13 @@ function Update-Etl2Pcapng
     # read settings.xml
     $settings = Get-E2PSettings
 
-    Write-Verbose "Update-Etl2Pcapng - Settings:`n`n$($settings | Format-List | Out-String)`n`n"
+    # for some reason the first pass doesn't return a E2PSettings class, so we force the issue
+    if ($settings -isnot [E2PSettings])
+    {
+        $settings = [E2PSettings]::new($settings)
+    }
+
+    Write-Verbose "Update-Etl2Pcapng - Settings:`n`n$($settings | Format-List | Out-String)`n`nType: $($settings.GetType().ToString())"
 
     # store app data path in an easier to use var
     $here = $settings.appDataPath
@@ -561,8 +528,28 @@ function Update-Etl2Pcapng
             ### It is supposed to be fixed in pwsh 7, but it's not.
             ### This should not be an issue for production since this should be run from a %LocalAppData%, not OneDrive.
             ### https://github.com/PowerShell/PowerShell/issues/9461
+            
+            #Remove-Item $isDirFnd.FullName -Recurse -Force -EA SilentlyContinue | Out-Null 
 
-            if ($isDirFnd) { Remove-Item $isDirFnd.FullName -Recurse -Force -EA SilentlyContinue | Out-Null }
+            # this should workaround the OneDrive bug
+            if ($isDirFnd) { 
+                # first delete all the files    
+                $childs = Get-ChildItem -LiteralPath "$($isDirFnd.FullName)" -Recurse -Force -File
+                foreach ($child in $childs) 
+                {
+                    $child.Delete()
+                }
+
+                # now get the directories
+                $childs = Get-ChildItem -LiteralPath "$($isDirFnd.FullName)" -Recurse -Force -Directory
+                foreach ($child in $childs) 
+                {
+                    $child.Delete($true)
+                }
+
+                # finally nuke the root dir
+                $isDirFnd.Delete($true)
+            }
 
             Write-Verbose "Update-Etl2Pcapng - Downloading etl2pcapng"
             # grab the etl2pcapng tags page from GitHub
@@ -592,12 +579,13 @@ function Update-Etl2Pcapng
             if ($isZipFnd) { Remove-Item "$e2pPath" -Force -EA SilentlyContinue | Out-Null }
 
             # update the installed version
-            Write-Verbose "Update-Etl2Pcapng - Updating version in settings to $($latest.Version)"
-            $settings.SetCurrVersion(($latest.Version))
+            [version]$version = $latest.Version
+            Write-Verbose "Update-Etl2Pcapng - Updating version in settings to $($version.ToString())"
+            $settings.SetCurrVersion($version)
         }
 
         # update Settings.LastUpdate
-        $updateTime = (Get-Date).Date.ToUniversalTime()
+        $updateTime = ([datetime]::Now).ToUniversalTime()
         Write-Verbose "Update-Etl2Pcapng - Updating last update check in settings to $($updateTime.ToString())"
         $settings.SetLastUpdate($updateTime)
         
@@ -666,7 +654,7 @@ function Get-E2PSettings
         Write-Verbose "Get-E2PSettings - Work complete!"
         return $settings
 
-        # create the file if it does not exist
+    # create the file if it does not exist
     }
     else 
     {
@@ -674,12 +662,12 @@ function Get-E2PSettings
         Write-Verbose "Get-E2PSettings - Settings file not found. Using defaults."
         $settings = New-E2PSetting
 
-        # write the settings JSON file
+        # write the settings file
         Set-E2PSettings $settings
         
-        # return default settings
+        # return settings
         Write-Verbose "Get-E2PSettings - Work complete!"
-        return $settings
+        return ([E2PSettings]::new($settings))
     }
     Write-Verbose "Get-E2PSettings - Something unexpected went wrong and no settings were returned."
     Write-Verbose "Get-E2PSettings - Work complete!"
@@ -698,7 +686,8 @@ function Set-E2PSettings
 
     try 
     {
-        $settings.Save("$($settings.appDataPath)\settings.xml")
+        #$settings.Save("$($settings.appDataPath)\settings.xml")
+        $settings | Export-Clixml -Path "$($settings.appDataPath)\settings.xml" -Depth 10 -Force -EA Stop
     }
     catch 
     {
@@ -722,43 +711,34 @@ function New-E2PSetting
 
 function Find-E2PPath
 {
-    # first try to get the module in use
-    $mods = Get-Module Convert-Etl2Pcapng -EA SilentlyContinue
+    # make sure the module is installed
+    $mods = Get-Module -ListAvailable Convert-Etl2Pcapng -EA SilentlyContinue
     
-    # the backup plan
-    if (-NOT $mods)
+    if ($mods)
     {
-        $mods = Get-Module -ListAvailable Convert-Etl2Pcapng
-
-        if ($mods -is [array])
+        # automatically put etl2pcapng and the settings.xml in the currentuser module path based on PowerShell version
+        # this allows files to be modified without running as Admin and keeps all the items in the module dir.
+        # the .* between USERPROFILE and \\Documents is needed in case OneDrive folder redirection is used
+        if ($host.Version.Major -ge 6)
         {
-            # look for the current user module
-            if ($PSHost.Version.Major -ge 6)
-            {
-                $here = Split-Path -Parent ($mods | Where-Object Path -match "^.*(?:$env:UserName).*(?!:WindowsPowerShell)").Path
-            }
-            else 
-            {
-                $here = Split-Path -Parent ($mods | Where-Object Path -match "^.*(?:$env:UserName).*(?:WindowsPowerShell)").Path
-            }
-
-            # if that failed, pick the first item on the list and use that
-            if (-NOT $here)
-            {
-                $here = Split-Path -Parent $mods[0].Path
-            }
+            $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE")).*\\Documents\\PowerShell\\Modules" }
+        }
+        elseif ($host.Version.Major -eq 5 -and $host.Version.Minor -eq 1)
+        {
+            $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE\")).*\\Documents\\WindowsPowerShell\\Modules" }
         }
         else
         {
-            $here = Split-Path -Parent $mods.Path
+            return (Write-Error "Unsupported version of PowerShell. Convert-Etl2Pcapng requires PowerShell version 5.1 or newer." -EA Stop)    
         }
+        
     }
-    else
+    else 
     {
-        $here = Split-Path -Parent $mods.Path
+        return (Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG." -EA Stop)
     }
 
-    return $here
+    return ("$here\Convert-Etl2Pcapng")
 }
 
 
@@ -866,8 +846,6 @@ function Find-GitReleaseLatest
         URL     = $dlURI
     })
 } #end Find-GitReleaseLatest
-
-
 
 
 # FUNCTION: Find-E2PSoftware
@@ -1006,17 +984,26 @@ class E2PSettings
     #region setters
     SetLastUpdate([datetime]$LastUpdate)
     {
-        $this.LastUpdate = $LastUpdate
+        if ($null -ne $LastUpdate)
+        {
+            $this.LastUpdate = $LastUpdate
+        }
     }
 
     SetCurrVersion([version]$CurrVersion)
     {
-        $this.CurrVersion = $CurrVersion
+        if ($null -ne $CurrVersion)
+        {
+            $this.CurrVersion = $CurrVersion
+        }
     }
 
     SetAppDataPath([string]$appDataPath)
     {
-        $this.appDataPath = $appDataPath
+        if ($null -ne $appDataPath)
+        {
+            $this.appDataPath = $appDataPath
+        }
     }
     #endregion setters
 
@@ -1067,6 +1054,44 @@ appDataPath : $($this.appDataPath)
     #endregion methods
 }
 
+
+function New-RegKey 
+{
+    [CmdletBinding()]
+    param(
+        [string]$path,
+        [string]$type,
+        $value
+    )
+
+    Write-Verbose "New-RegKey: Starting"
+    # make sure the PSDrive to HKCR is created
+    if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
+    {
+        New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
+    }
+
+    # do the reg work
+    try 
+    {
+        Write-Verbose "New-RegKey: Creating key $path"
+        if ($type -eq "Directory") {
+            New-Item $path -ItemType $type -Force -EA SilentlyContinue | Out-Null
+        }
+        else {
+            Write-Verbose "New-RegKey: Setting property on $path to $value"
+            Set-ItemProperty -LiteralPath $path -Name '(Default)' -Value $value -Force -EA SilentlyContinue | Out-Null
+        }
+    }
+    catch 
+    {
+        Write-Error "New-RegKey: Failed to create $path."
+        return $false
+    }
+
+    Write-Verbose "New-RegKey: Work complete!"
+    return $true
+}
 
 
 #endregion AUX
