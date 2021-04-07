@@ -52,8 +52,7 @@ function Register-Etl2Pcapng
     Write-Verbose "Register-Etl2Pcapng: Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
     {
-        Write-Error "Register-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again."
-        return $null
+        return (Write-Error "Register-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again." -EA Stop)
     }
 
     # make sure the module is installed, just in case
@@ -61,7 +60,13 @@ function Register-Etl2Pcapng
     $isModFnd = Get-Module -ListAvailable Convert-ETL2PCAPNG -EA SilentlyContinue
 
     if (-NOT $isModFnd) {
-        return (Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG." -EA Stop)
+        # is it running and not in the list for some reason (like during testing)?
+        $isModFnd = Get-Module Convert-ETL2PCAPNG -EA SilentlyContinue
+
+        if (-NOT $isModFnd)
+        {
+            return (Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG." -EA Stop)
+        }
     }
 
     # create a PSDrive to HKEY_CLASSES_ROOT
@@ -71,10 +76,26 @@ function Register-Etl2Pcapng
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
     }
 
+    # remove existing Convert-Etl2Pcapng entries
+    $rootPath = "HKCR:\SystemFileAssociations\.etl\shell\Convert-Etl2Pcapng"
+
+    $isCE2PReg = Get-Item $rootPath -EA SilentlyContinue
+    
+    if ($isCE2PReg)
+    {
+        try 
+        {
+            Remove-Item $rootPath -Force -Recurse -EA Stop    
+        }
+        catch 
+        {
+            Write-Warning "Failed to cleanup older Convert-Etl2Pcapng registration. This is a non-terminating warning."
+        }
+    }
+
     # create the shell extension for etl2pcapng
     Write-Verbose "Register-Etl2Pcapng: Add the Convert-Etl2Pcapng app to HKCR:\SystemFileAssociations\.etl to prevent possible conflicts."
 
-    $rootPath = "HKCR:\SystemFileAssociations\.etl\shell\Convert-Etl2Pcapng"
     if (-NOT (New-RegKey "$rootPath\Command" Directory)) { Write-Error "Could not create directory in SystemFileAssociations."; exit }
 
     # create the command
@@ -87,7 +108,7 @@ function Register-Etl2Pcapng
     }
     elseif ($UseDebug) 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug'
+        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug -Verbose'
     }
     else 
     {
@@ -187,11 +208,44 @@ function Unregister-Etl2Pcapng
     
 
     # clean up the user folder
-    Write-Verbose "Unregister-Etl2Pcapng: Cleaning up LocalAppData directory."
+    Write-Verbose "Unregister-Etl2Pcapng: Cleaning up appDataPath directory."
+    
+    # read settings.xml
     $settings = Get-E2PSettings
+
+    # for some reason the first pass doesn't return a E2PSettings class, so we force the issue
+    if ($settings -isnot [E2PSettings])
+    {
+        $settings = [E2PSettings]::new($settings)
+    }
+
     try 
     {
-        Remove-Item $settings.appDataPath -Force -Recurse -EA Stop    
+        # OneDrive safe delete process
+        $isDirFnd = Get-Item "$($settings.appDataPath)\etl2pcapng" -EA SilentlyContinue
+
+        # this should workaround the OneDrive bug
+        if ($isDirFnd) { 
+            # first delete all the files    
+            $childs = Get-ChildItem -LiteralPath "$($isDirFnd.FullName)" -Recurse -Force -File
+            foreach ($child in $childs) 
+            {
+                $child.Delete()
+            }
+
+            # now get the directories
+            $childs = Get-ChildItem -LiteralPath "$($isDirFnd.FullName)" -Recurse -Force
+            foreach ($child in $childs) 
+            {
+                $child.Delete()
+            }
+
+            # finally nuke the root dir
+            $isDirFnd.Delete($true)
+        }
+
+        # removing the settings, too. It will regenerate again if needed.
+        Remove-Item "$($settings.appDataPath)\settings.xml" -Force -EA SilentlyContinue 
     }
     catch 
     {
@@ -628,9 +682,10 @@ function Update-Etl2Pcapng
 # PURPOSE  : Finds and returns the module settings  
 function Get-E2PSettings 
 {
-    Write-Verbose "Get-E2PSettings - Starting"
+    Write-Verbose "Get-E2PSettings - Begin"
 
     $setPath = "$(Find-E2PPath)\settings.xml"
+    Write-Verbose "Get-E2PSettings - Using '$setPath' as the appDataPath."
 
     # is there a settings file at the appDataPath location?
     $isADP = Get-Item $setPath -ErrorAction SilentlyContinue
@@ -663,6 +718,7 @@ function Get-E2PSettings
         $settings = New-E2PSetting
 
         # write the settings file
+        Write-Verbose "Get-E2PSettings - Writing settings."
         Set-E2PSettings $settings
         
         # return settings
@@ -684,9 +740,15 @@ function Set-E2PSettings
         [PSCustomObject]$settings
     )
 
+    $isAPDFnd = Get-Item "$($settings.appDataPath)" -EA SilentlyContinue
+
     try 
     {
-        #$settings.Save("$($settings.appDataPath)\settings.xml")
+        if (-NOT $isAPDFnd)
+        {
+            New-Item -Path "$($settings.appDataPath)" -ItemType Directory -Force -EA Stop | Out-Null
+        }
+
         $settings | Export-Clixml -Path "$($settings.appDataPath)\settings.xml" -Depth 10 -Force -EA Stop
     }
     catch 
@@ -711,33 +773,35 @@ function New-E2PSetting
 
 function Find-E2PPath
 {
-    # make sure the module is installed
-    $mods = Get-Module -ListAvailable Convert-Etl2Pcapng -EA SilentlyContinue
+    Write-Verbose "Find-E2PPath - Begin."
+    Write-Verbose "Find-E2PPath - Searching for installed module."
+    # make sure the running module
+    $mods = Get-Module Convert-Etl2Pcapng -EA SilentlyContinue
+
+    # fall back to listed modules if none are running
+    if (-NOT $mods)
+    {
+        $mods = Get-Module -ListAvailable Convert-Etl2Pcapng -EA SilentlyContinue
+    }
     
     if ($mods)
     {
-        # automatically put etl2pcapng and the settings.xml in the currentuser module path based on PowerShell version
-        # this allows files to be modified without running as Admin and keeps all the items in the module dir.
-        # the .* between USERPROFILE and \\Documents is needed in case OneDrive folder redirection is used
-        if ($host.Version.Major -ge 6)
-        {
-            $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE")).*\\Documents\\PowerShell\\Modules" }
-        }
-        elseif ($host.Version.Major -eq 5 -and $host.Version.Minor -eq 1)
-        {
-            $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE\")).*\\Documents\\WindowsPowerShell\\Modules" }
-        }
-        else
-        {
-            return (Write-Error "Unsupported version of PowerShell. Convert-Etl2Pcapng requires PowerShell version 5.1 or newer." -EA Stop)    
-        }
-        
+        Write-Verbose "Find-E2PPath - Figuring out what path to use."
+        $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE\")).*" }
+        Write-Verbose "Find-E2PPath - Using module path: $here"
     }
     else 
     {
         return (Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG." -EA Stop)
     }
 
+    if (-NOT $here)
+    {
+        return (Write-Error "Failed to find a current user module path." -EA Stop)
+    }
+
+    Write-Verbose "Find-E2PPath - Returning: $here\Convert-Etl2Pcapng"
+    Write-Verbose "Find-E2PPath - End."
     return ("$here\Convert-Etl2Pcapng")
 }
 
