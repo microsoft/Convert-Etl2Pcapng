@@ -787,8 +787,15 @@ function Find-E2PPath
     if ($mods)
     {
         Write-Verbose "Find-E2PPath - Figuring out what path to use."
-        $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE\")).*" }
-        Write-Verbose "Find-E2PPath - Using module path: $here"
+        $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE"))" }
+
+        # use legacy %localappdata% method if CurrentUser is not available
+        if (-NOT $here)
+        {
+            Write-Verbose "Find-E2PPath - Had to fall back to legacy %LOCALAPPDATA% path."
+            # we avoid using admin module paths since I can't dynamnically add files there
+            $here = "$env:LOCALAPPDATA\Convert-Etl2Pcapng"
+        }
     }
     else 
     {
