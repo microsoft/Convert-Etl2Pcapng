@@ -335,7 +335,7 @@ function Convert-Etl2Pcapng
     }
     else 
     {
-        $isPathFnd = Get-Item $Path -EA SilentlyContinue    
+        $isPathFnd = Get-Item "$Path" -EA SilentlyContinue    
     }
     
     # if a dir/container, then look for ETL files
@@ -390,12 +390,12 @@ function Convert-Etl2Pcapng
         }
 
         # create the dir if it's not there
-        $isOutFnd = Get-Item $Out -EA SilentlyContinue
+        $isOutFnd = Get-Item "$Out" -EA SilentlyContinue
         if (-NOT $isOutFnd) 
         {
             try {
                 Write-Verbose "Convert-Etl2Pcapng: Creating output path $Out"
-                New-Item $Out -ItemType Directory -Force -EA Stop | Out-Null
+                New-Item "$Out" -ItemType Directory -Force -EA Stop | Out-Null
             }
             catch {
                 Write-Error "Convert-Etl2Pcapng: Failed to create Out directory at $Out. Error: $($error[0].ToString())"
@@ -411,7 +411,7 @@ function Convert-Etl2Pcapng
     # validate etl2pcapng is actually there and strip out the parent dir
     if ($e2pPath) 
     {
-        $isE2PFnd = Get-Item $e2pPath -EA SilentlyContinue
+        $isE2PFnd = Get-Item "$e2pPath" -EA SilentlyContinue
 
         if ($isE2PFnd) {
             $e2pDir = $isE2PFnd.DirectoryName
@@ -688,7 +688,7 @@ function Get-E2PSettings
     Write-Verbose "Get-E2PSettings - Using '$setPath' as the appDataPath."
 
     # is there a settings file at the appDataPath location?
-    $isADP = Get-Item $setPath -ErrorAction SilentlyContinue
+    $isADP = Get-Item "$setPath" -ErrorAction SilentlyContinue
 
     # read the file if it exists
     if ($isADP) 
@@ -1147,7 +1147,7 @@ function New-RegKey
     {
         Write-Verbose "New-RegKey: Creating key $path"
         if ($type -eq "Directory") {
-            New-Item $path -ItemType $type -Force -EA SilentlyContinue | Out-Null
+            New-Item "$path" -ItemType $type -Force -EA SilentlyContinue | Out-Null
         }
         else {
             Write-Verbose "New-RegKey: Setting property on $path to $value"
