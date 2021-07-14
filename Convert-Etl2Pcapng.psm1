@@ -321,7 +321,16 @@ function Convert-Etl2Pcapng
             ParameterSetName = 'LiteralPath',
             ValueFromPipeline = $false )]
         [switch]
-        $Recurse
+        $Recurse,
+
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'Path',
+            ValueFromPipeline = $false )]
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'LiteralPath',
+            ValueFromPipeline = $false )]
+        [switch]
+        $AcceptEULA
     )
 
     Write-Verbose "Convert-Etl2Pcapng: Work! Work!"
@@ -406,13 +415,45 @@ function Convert-Etl2Pcapng
 
     ### get the path to etl2pcapng.exe
     Write-Verbose "Convert-Etl2Pcapng: Getting for etl2pcapng location."
-    $e2pPath = Update-Etl2Pcapng
+    try 
+    {
+        if ($AcceptEULA.IsPresent)
+        {
+            [string]$e2pPath = Update-Etl2Pcapng -AcceptEULA
+        }
+        else
+        {
+            [string]$e2pPath = Update-Etl2Pcapng
+        }
+        
+    }
+    catch 
+    {
+        return (Write-Error "Settings failure: $_" -EA Stop)
+    }
 
     # validate etl2pcapng is actually there and strip out the parent dir
     if ($e2pPath) 
     {
-        $isE2PFnd = Get-Item "$e2pPath" -EA SilentlyContinue
+        Write-Verbose "Convert-Etl2Pcapng: Received etl2pcapng location: '$e2pPath'"
 
+        # need this to trim a mysterious leading space when etl2pcapng is first downloaded and extracted
+        $e2pPath = $e2pPath.Trim(" ")
+
+        Write-Verbose "Convert-Etl2Pcapng: Validating etl2pcapng location: '$e2pPath'"
+
+        # putting this in a loop due to OneDrive delay shinanigans
+        $c = 0
+        do
+        {
+            Start-Sleep -m 250
+
+            $isE2PFnd = Get-Item "$e2pPath" -EA SilentlyContinue
+            Write-Verbose "Convert-Etl2Pcapng: Validated e2p path: $($isE2PFnd.FullName)"
+
+            $c++
+        } until ($isE2PFnd -or $c -ge 5)
+        
         if ($isE2PFnd) {
             $e2pDir = $isE2PFnd.DirectoryName
         }
@@ -420,6 +461,10 @@ function Convert-Etl2Pcapng
             Write-Error "Convert-Etl2Pcapng: Failed to locate etl2pcanpng.exe."
             return $null
         }
+    }
+    else
+    {
+        return $null
     }
 
     #### Finally do the conversion work ####
@@ -450,7 +495,10 @@ function Convert-Etl2Pcapng
 function Update-Etl2Pcapng 
 {
     [CmdletBinding()]
-    param([switch]$Force)
+    param(
+        [switch]$Force,
+        [switch]$AcceptEULA
+        )
 
     <# 
      # Check for etl2pcapng updates only once a week
@@ -491,6 +539,48 @@ function Update-Etl2Pcapng
     $here = $settings.appDataPath
 
     Write-Verbose "Update-Etl2Pcapng - Timestamps:`nCurrent date:`t$((Get-Date).Date)`nSettings date:`t$($settings.LastUpdate.Date)`n"
+
+
+    # EULA prompt
+    if ($AcceptEULA.IsPresent)
+    {
+        $settings.SetEulaStatus($true)
+        Set-E2PSettings $settings
+    }
+    elseif ($settings.AcceptEULA -eq $false)
+    {
+        Write-Host @"
+Privacy Notice and End User License Agreement (EULA)
+This PowerShell module does not collect or upload data to Microsoft, third-parties, or Microsoft partners.
+
+Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
+
+By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact github.com to check, download, and extract etl2pcapng to this computer from github.com.
+
+"@
+
+        $c = 0
+        do
+        {
+            $answer = Read-Host "[A] Agree and continue, do not prompt in the future`n[Y] Agree once, prompt again (not recommended when using automation)`n[N] I do not agree, please terminate the script`nResponse"
+            $c++
+        } until ($answer -eq 'a' -or $answer -eq 'y' -or $answer -eq 'n' -or $c -gt 3)
+        
+        switch ($answer)
+        {
+            'a' 
+            { 
+                $settings.SetEulaStatus($true)
+                Set-E2PSettings $settings
+                break 
+            }
+            'y' { break }
+            'n' { return $null }
+            default { return (Write-Error "Failed to get a valid user response to the EULA." -EA Stop)}
+        }
+
+    }
+
 
     # check for an update when -Force set or it's been 7 days since we last checked
     if ($Force -or ((Get-Date).Date.AddDays(-7) -gt $settings.LastUpdate.Date)) 
@@ -653,9 +743,11 @@ function Update-Etl2Pcapng
     
     if ($isE2PFnd) 
     {
-        Write-Verbose "Update-Etl2Pcapng - Returning etl2pcapng.exe at $here\etl2pcapng\$arch\etl2pcapng.exe"
+        $fullPath = "$here\etl2pcapng\$arch\etl2pcapng.exe"
+        Write-Verbose "Update-Etl2Pcapng - Returning etl2pcapng.exe at '$fullPath'"
+        Write-Debug "Update-Etl2Pcapng - '$here'"
         Write-Verbose "Update-Etl2Pcapng - Work complete."
-        return ("$here\etl2pcapng\$arch\etl2pcapng.exe")
+        return $fullPath
     }
     else 
     {
@@ -807,7 +899,7 @@ function Find-E2PPath
         return (Write-Error "Failed to find a current user module path." -EA Stop)
     }
 
-    Write-Verbose "Find-E2PPath - Returning: $here\Convert-Etl2Pcapng"
+    Write-Verbose "Find-E2PPath - Returning: '$here\Convert-Etl2Pcapng'"
     Write-Verbose "Find-E2PPath - End."
     return ("$here\Convert-Etl2Pcapng")
 }
@@ -1010,6 +1102,7 @@ class E2PSettings
     [datetime]$LastUpdate
     [version]$CurrVersion
     [string]$appDataPath
+    [bool]$AcceptEULA
 
     #region construtors
     E2PSettings()
@@ -1017,6 +1110,7 @@ class E2PSettings
         $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
         $this.CurrVersion   = [version]::new()
         $this.appDataPath   = $null
+        $this.AcceptEULA    = $false
     }
 
     E2PSettings([string]$path)
@@ -1024,6 +1118,7 @@ class E2PSettings
         $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
         $this.CurrVersion   = [version]::new()
         $this.appDataPath   = $path
+        $this.AcceptEULA    = $false
     }
 
     E2PSettings([PSCustomObject]$set)
@@ -1031,6 +1126,7 @@ class E2PSettings
         $this.LastUpdate    = $set.LastUpdate
         $this.CurrVersion   = $set.CurrVersion
         $this.appDataPath   = $set.appDataPath
+        $this.AcceptEULA    = $set.AcceptEULA
     }
     #endregion construtors
 
@@ -1048,6 +1144,11 @@ class E2PSettings
     [string]GetAppDataPath()
     {
         return ($this.appDataPath)
+    }
+
+    [bool]GetEulaStatus()
+    {
+        return ($this.AcceptEULA)
     }
     #endregion getters
 
@@ -1076,6 +1177,11 @@ class E2PSettings
             $this.appDataPath = $appDataPath
         }
     }
+
+    SetEulaStatus([bool]$eulaStatus)
+    {
+        $this.AcceptEULA = $eulaStatus
+    }
     #endregion setters
 
 
@@ -1086,6 +1192,7 @@ class E2PSettings
 LastUpdate  : $($this.appDataPath)
 CurrVersion : $($this.CurrVersion)
 appDataPath : $($this.appDataPath)
+AcceptEULA  : $($this.AcceptEULA)
 "@)
     }
 
