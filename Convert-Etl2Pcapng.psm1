@@ -43,16 +43,74 @@ function Register-Etl2Pcapng
         # Causes the explorer menu option, "Convert with etl2pcapng", to not exit the command prompt when complete and output Verbose logging.
         [switch]$UseVerbose,
         # Causes the explorer menu option, "Convert with etl2pcapng", to not exit the command prompt when complete and output Debug logging.
-        [switch]$UseDebug
+        [switch]$UseDebug,
+        # Accepts the EULA at runtime and prevents the prompt to accept.
+        [switch]$AcceptEULA
     )
 
-    Write-Verbose "Register-Etl2Pcapng: Work! Work!"
+    Write-Verbose "Register-Etl2Pcapng - Work! Work!"
 
     # test for Admin access
-    Write-Verbose "Register-Etl2Pcapng: Test admin rights."
+    Write-Verbose "Register-Etl2Pcapng - Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
     {
         return (Write-Error "Register-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again." -EA Stop)
+    }
+
+    # read settings.xml
+    $script:settings = Get-E2PSettings
+
+    # for some reason the first pass doesn't return a E2PSettings class, so we force the issue
+    if ($settings -isnot [E2PSettings])
+    {
+        $settings = [E2PSettings]::new($settings)
+    }
+
+    Write-Verbose "Register-Etl2Pcapng - Settings:`n$($settings.ToString())"
+
+    # EULA must be accepted to proceed
+    # don't prompt if -AcceptEULA was set
+    if ($AcceptEULA.IsPresent)
+    {
+        Write-Verbose "Register-Etl2Pcapng - Accepting EULA by parameter."
+        $settings.SetEulaStatus($true)
+        Set-E2PSettings $settings
+    }
+    # prompt if no -AcceptEULA and EULA in settings is set to false
+    elseif ($settings.AcceptEULA -eq $false)
+    {
+        Write-Host @"
+Privacy Notice and End User License Agreement (EULA)
+This PowerShell module does not collect or upload data to Microsoft, third-parties, or Microsoft partners.
+
+Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
+
+By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact github.com to check, download, and extract etl2pcapng to this computer from github.com.
+
+WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context menu item.
+
+"@
+    
+        $c = 0
+        do
+        {
+            $answer = Read-Host "[Y] Yes, I Agree `n[N] I do Not agree`nResponse"
+            $c++
+        } until ($answer -eq 'a' -or $answer -eq 'y' -or $answer -eq 'n' -or $c -gt 3)
+        
+        switch ($answer)
+        {
+            'y' 
+            { 
+                Write-Verbose "Register-Etl2Pcapng - Accepting EULA by user input."
+                # need to write EULA and make sure the file is downloaded
+                $settings.SetEulaStatus($true)
+                Set-E2PSettings $settings
+                break 
+            }
+            'n' { return $null }
+            default { return (Write-Error "Failed to get a valid user response to the EULA." -EA Stop)}
+        }
     }
 
     # make sure the module is installed, just in case
@@ -99,25 +157,101 @@ function Register-Etl2Pcapng
     if (-NOT (New-RegKey "$rootPath\Command" Directory)) { Write-Error "Could not create directory in SystemFileAssociations."; exit }
 
     # create the command
-    Write-Verbose "Register-Etl2Pcapng: Configure Convert-Etl2Pcapng."
+    Write-Verbose "Register-Etl2Pcapng - Configure Convert-Etl2Pcapng."
     if (-NOT (New-RegKey $rootPath -value "Convert with etl2pcapng")) { Write-Error "Could not write menu text." }
 
-    if ($UseVerbose) 
+    # create Open With keys for better Win11 support
+    $rootOpenWith = "HKCR:\.etl\OpenWithProgids"
+    $progID = "Convert-Etl2Pcapng.etl"
+
+    Write-Verbose "Register-Etl2Pcapng - Configure Convert-Etl2Pcapng for Open With menu."
+    $isOpenWith = Get-Item $rootOpenWith -EA SilentlyContinue
+    try 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Verbose'
+        # if the OpenWithProgids is not there then create it
+        if (-NOT $isOpenWith)
+        {
+            New-Item $rootOpenWith -Force -EA Stop
+        }
+
+        # The set version will create or change, where new only creates, so use set.
+        Set-ItemProperty -Path $rootOpenWith -Name $progID -Type String -Value '' -Force -EA Stop
+        
     }
-    elseif ($UseDebug) 
+    catch 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug -Verbose'
+        Write-Error "Failed to create the Open With association to .etl: $_"
     }
-    else 
+
+    # discover the current shell since currentuser scope puts the module in different places in 7+ than 5.1.
+    # powershell = Windows PowerShell 5.1
+    # pwsh       = PowerShell 7+
+    if ($host.Version.Major -eq 5)
     {
-        $cmd = 'cmd /c powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'''
+        Write-Verbose "Register-Etl2Pcapng - Detected Windows PowerShell."
+        $cli = "powershell.exe"
     }
+    else
+    {
+        Write-Verbose "Register-Etl2Pcapng - Detected PowerShell 7."
+        $cli = "pwsh.exe"
+    }
+
+    # if this is Win11 then we can use Windows Terminal (wt)
+    if ( [System.Environment]::OSVersion.Version.Build -ge 22000 )
+    {    
+        Write-Verbose "Register-Etl2Pcapng - Detected Windows 11. Using Windows Terminal as the base console."
+
+        if ($UseVerbose) 
+        {
+            $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"' -Pause -Verbose"
+        }
+        elseif ($UseDebug) 
+        {
+            $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"' -Pause -Debug -Verbose"
+        }
+        else 
+        {
+            $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"'"
+        }
+    }
+    else
+    {    
+        Write-Verbose "Register-Etl2Pcapng - Detected pre-Windows 11. Using CMD as the base console."
+        if ($UseVerbose) 
+        {
+            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Verbose"
+        }
+        elseif ($UseDebug) 
+        {
+            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug -Verbose"
+        }
+        else 
+        {
+            $cmd = "cmd /c $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1''"
+        }
+    }
+
 
     Write-Verbose "Register-Etl2Pcapng: Add Convert-ETL2PCAPNG command: $cmd"
     if (-NOT (New-RegKey "$rootPath\Command" -Value $cmd)) { Write-Error "Could not write command to registry."; exit }
 
+
+    # create the progID key structure and add the command for the open with menu
+    $rootProgID = "HKCR:\$progID\shell\Convert with etl2pcapng\command"
+    try 
+    {
+        $null = New-Item $rootProgID -Force -EA Stop
+        Set-ItemProperty -Path $rootProgID -Name '(Default)' -Type String -Value $cmd -Force -EA Stop
+        Set-ItemProperty -Path "HKCR:\$progID\shell\Convert with etl2pcapng" -Name '(Default)' -Type String -Value "Convert with etl2pcapng" -Force -EA Stop
+    }
+    catch 
+    {
+        # remove the OpenWithProgids entry
+        $null = Remove-ItemProperty -Path $rootOpenWith -Name $progID -Force -EA SilentlyContinue
+        Write-Error "Failed to create the Open With app: $_"
+    }
+    
     # check for the ETL extenstion in HKCR, create if missing
     Write-Verbose "Register-Etl2Pcapng: Add the context item to .etl files."
 
@@ -305,6 +439,7 @@ function Convert-Etl2Pcapng
         [System.IO.FileSystemInfo]
         $PSPath,
 
+        # Alternate output directory.
         [parameter( Position = 1,
             ParameterSetName = 'Path',
             ValueFromPipeline = $false )]
@@ -314,6 +449,7 @@ function Convert-Etl2Pcapng
         [string]
         $Out = $null,
 
+        # Search for ETL files in child directories.
         [parameter( Mandatory = $false,
             ParameterSetName = 'Path',
             ValueFromPipeline = $false )]
@@ -323,6 +459,7 @@ function Convert-Etl2Pcapng
         [switch]
         $Recurse,
 
+        # Accepts EULA and skips prompt.
         [parameter( Mandatory = $false,
             ParameterSetName = 'Path',
             ValueFromPipeline = $false )]
@@ -330,7 +467,17 @@ function Convert-Etl2Pcapng
             ParameterSetName = 'LiteralPath',
             ValueFromPipeline = $false )]
         [switch]
-        $AcceptEULA
+        $AcceptEULA,
+
+        # Pauses the function at the end of execution. Used primarily for debugging with the context meny created by Register-Etl2Pcapng.
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'Path',
+            ValueFromPipeline = $false )]
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'LiteralPath',
+            ValueFromPipeline = $false )]
+        [switch]
+        $Pause
     )
 
     Write-Verbose "Convert-Etl2Pcapng: Work! Work!"
@@ -486,6 +633,11 @@ function Convert-Etl2Pcapng
     Pop-Location
 
     Write-Verbose "Convert-Etl2Pcapng: Work complete!"
+
+    if ($Pause.IsPresent)
+    {
+        $null = Read-Host "Press Enter to continue..."
+    }
 } #end Convert-Etl2Pcapng
 
 
