@@ -68,46 +68,56 @@ These commands should cleanup all Convert-Etl2Pcapng modules and files.
 
 ```
 # cleanup old versions of Convert-Etl2Pcapng
+Unregister-Etl2Pcapng
 Get-Module -ListAvailable Convert-Etl2Pcapng | Uninstall-Module -Force
 
 # OneDrive safe cleanup method
 $modPaths = $env:PSModulePath -split ';'
 
-foreach ($path in $modPaths)
+$count = 0
+do
 {
-    $isC2PFnd = Get-Item "$path\Convert-Etl2Pcapng" -EA SilentlyContinue
-
-    if ($isC2PFnd)
+    # clean the error variable
+    $error.Clear()
+    foreach ($path in $modPaths)
     {
-        # first delete all the files    
-        $childs = Get-ChildItem -LiteralPath "$($isC2PFnd.FullName)" -Recurse -Force -File
-        foreach ($child in $childs) 
+        $isC2PFnd = Get-Item "$path\Convert-Etl2Pcapng" -EA SilentlyContinue
+
+        if ($isC2PFnd)
         {
-            $child.Delete()
+            # first delete all the files    
+            $childs = Get-ChildItem -LiteralPath "$($isC2PFnd.FullName)" -Recurse -Force -File
+            foreach ($child in $childs) 
+            {
+                $child.Delete()
+            }
+
+            # take a nap while OneDrive catches up
+            sleep 5
+
+            # now get the directories
+            $childs = Get-ChildItem -LiteralPath "$($isC2PFnd.FullName)" -Recurse -Force
+            foreach ($child in $childs) 
+            {
+                $child.Delete()
+            }
+
+            # take a nap while OneDrive catches up
+            sleep 5
+
+            # finally nuke the root dir
+            $isC2PFnd.Delete($true)
         }
-
-        # take a nap while OneDrive catches up
-        sleep 5
-
-        # now get the directories
-        $childs = Get-ChildItem -LiteralPath "$($isC2PFnd.FullName)" -Recurse -Force
-        foreach ($child in $childs) 
-        {
-            $child.Delete()
-        }
-
-        # take a nap while OneDrive catches up
-        sleep 5
-
-        # finally nuke the root dir
-        $isC2PFnd.Delete($true)
     }
-}
+
+    # increment the counter
+    $count++
+    
+#loop until there are no errors or three attempts were made
+} until ($error.Count -eq 0 -or $count -gt 3)
 ```
 
-Rerun the `# OneDrive safe cleanup method` portion of the commands a second time if you get errors during the initial execution. OneDrive and PowerShell don't always play nice with each other.
-
-If all else fails then go in and delete the modules manually.
+If this fails then may need to delete the module files manually.
 
 
 # Known issues
@@ -115,10 +125,10 @@ If all else fails then go in and delete the modules manually.
 All known breaking errors have been fixed. Please post an Issue if you find one. You can enter debug mode for the shell menu by registering using this command.
 
 ```
-Register-Etl2Pcapng -UseDebug
+Register-Etl2Pcapng -UseVerbose
 ```
 
-All cmdlets also support -Verbose and file redirection for troubleshooting.
+All cmdlets also support stream redirection for troubleshooting.
 
 
 
@@ -128,6 +138,9 @@ This PowerShell module does not collect or upload data to Microsoft, third-parti
 
 Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
 
+# Support
+
+All support for the Convert-Etl2Pcapng module is handled through the [Convert-Etl2Pcapng Github Issues](https://github.com/microsoft/Convert-Etl2Pcapng/issues) page. The Microsoft support organizations do not, and cannot, support this module since it is an OSS project and not an in-box product component or feature.
 
 # Contributing
 

@@ -43,16 +43,74 @@ function Register-Etl2Pcapng
         # Causes the explorer menu option, "Convert with etl2pcapng", to not exit the command prompt when complete and output Verbose logging.
         [switch]$UseVerbose,
         # Causes the explorer menu option, "Convert with etl2pcapng", to not exit the command prompt when complete and output Debug logging.
-        [switch]$UseDebug
+        [switch]$UseDebug,
+        # Accepts the EULA at runtime and prevents the prompt to accept.
+        [switch]$AcceptEULA
     )
 
-    Write-Verbose "Register-Etl2Pcapng: Work! Work!"
+    Write-Verbose "Register-Etl2Pcapng - Work! Work!"
 
     # test for Admin access
-    Write-Verbose "Register-Etl2Pcapng: Test admin rights."
+    Write-Verbose "Register-Etl2Pcapng - Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
     {
         return (Write-Error "Register-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again." -EA Stop)
+    }
+
+    # read settings.xml
+    $script:settings = Get-E2PSettings
+
+    # for some reason the first pass doesn't return a E2PSettings class, so we force the issue
+    if ($settings -isnot [E2PSettings])
+    {
+        $settings = [E2PSettings]::new($settings)
+    }
+
+    Write-Verbose "Register-Etl2Pcapng - Settings:`n$($settings.ToString())"
+
+    # EULA must be accepted to proceed
+    # don't prompt if -AcceptEULA was set
+    if ($AcceptEULA.IsPresent)
+    {
+        Write-Verbose "Register-Etl2Pcapng - Accepting EULA by parameter."
+        $settings.SetEulaStatus($true)
+        Set-E2PSettings $settings
+    }
+    # prompt if no -AcceptEULA and EULA in settings is set to false
+    elseif ($settings.AcceptEULA -eq $false)
+    {
+        Write-Host @"
+Privacy Notice and End User License Agreement (EULA)
+This PowerShell module does not collect or upload data to Microsoft, third-parties, or Microsoft partners.
+
+Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
+
+By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact github.com to check, download, and extract etl2pcapng to this computer from github.com.
+
+WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context menu item.
+
+"@
+    
+        $c = 0
+        do
+        {
+            $answer = Read-Host "[Y] Yes, I Agree `n[N] I do Not agree`nResponse"
+            $c++
+        } until ($answer -eq 'a' -or $answer -eq 'y' -or $answer -eq 'n' -or $c -gt 3)
+        
+        switch ($answer)
+        {
+            'y' 
+            { 
+                Write-Verbose "Register-Etl2Pcapng - Accepting EULA by user input."
+                # need to write EULA and make sure the file is downloaded
+                $settings.SetEulaStatus($true)
+                Set-E2PSettings $settings
+                break 
+            }
+            'n' { return $null }
+            default { return (Write-Error "Failed to get a valid user response to the EULA." -EA Stop)}
+        }
     }
 
     # make sure the module is installed, just in case
@@ -99,25 +157,101 @@ function Register-Etl2Pcapng
     if (-NOT (New-RegKey "$rootPath\Command" Directory)) { Write-Error "Could not create directory in SystemFileAssociations."; exit }
 
     # create the command
-    Write-Verbose "Register-Etl2Pcapng: Configure Convert-Etl2Pcapng."
+    Write-Verbose "Register-Etl2Pcapng - Configure Convert-Etl2Pcapng."
     if (-NOT (New-RegKey $rootPath -value "Convert with etl2pcapng")) { Write-Error "Could not write menu text." }
 
-    if ($UseVerbose) 
+    # create Open With keys for better Win11 support
+    $rootOpenWith = "HKCR:\.etl\OpenWithProgids"
+    $progID = "Convert-Etl2Pcapng.etl"
+
+    Write-Verbose "Register-Etl2Pcapng - Configure Convert-Etl2Pcapng for Open With menu."
+    $isOpenWith = Get-Item $rootOpenWith -EA SilentlyContinue
+    try 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Verbose'
+        # if the OpenWithProgids is not there then create it
+        if (-NOT $isOpenWith)
+        {
+            New-Item $rootOpenWith -Force -EA Stop
+        }
+
+        # The set version will create or change, where new only creates, so use set.
+        Set-ItemProperty -Path $rootOpenWith -Name $progID -Type String -Value '' -Force -EA Stop
+        
     }
-    elseif ($UseDebug) 
+    catch 
     {
-        $cmd = 'cmd /k powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug -Verbose'
+        Write-Error "Failed to create the Open With association to .etl: $_"
     }
-    else 
+
+    # discover the current shell since currentuser scope puts the module in different places in 7+ than 5.1.
+    # powershell = Windows PowerShell 5.1
+    # pwsh       = PowerShell 7+
+    if ($host.Version.Major -eq 5)
     {
-        $cmd = 'cmd /c powershell -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'''
+        Write-Verbose "Register-Etl2Pcapng - Detected Windows PowerShell."
+        $cli = "powershell.exe"
     }
+    else
+    {
+        Write-Verbose "Register-Etl2Pcapng - Detected PowerShell 7."
+        $cli = "pwsh.exe"
+    }
+
+    # if this is Win11 then we can use Windows Terminal (wt)
+    if ( [System.Environment]::OSVersion.Version.Build -ge 22000 )
+    {    
+        Write-Verbose "Register-Etl2Pcapng - Detected Windows 11. Using Windows Terminal as the base console."
+
+        if ($UseVerbose) 
+        {
+            $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"' -Pause -Verbose"
+        }
+        elseif ($UseDebug) 
+        {
+            $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"' -Pause -Debug -Verbose"
+        }
+        else 
+        {
+            $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"'"
+        }
+    }
+    else
+    {    
+        Write-Verbose "Register-Etl2Pcapng - Detected pre-Windows 11. Using CMD as the base console."
+        if ($UseVerbose) 
+        {
+            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Verbose"
+        }
+        elseif ($UseDebug) 
+        {
+            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug -Verbose"
+        }
+        else 
+        {
+            $cmd = "cmd /c $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1''"
+        }
+    }
+
 
     Write-Verbose "Register-Etl2Pcapng: Add Convert-ETL2PCAPNG command: $cmd"
     if (-NOT (New-RegKey "$rootPath\Command" -Value $cmd)) { Write-Error "Could not write command to registry."; exit }
 
+
+    # create the progID key structure and add the command for the open with menu
+    $rootProgID = "HKCR:\$progID\shell\Convert with etl2pcapng\command"
+    try 
+    {
+        $null = New-Item $rootProgID -Force -EA Stop
+        Set-ItemProperty -Path $rootProgID -Name '(Default)' -Type String -Value $cmd -Force -EA Stop
+        Set-ItemProperty -Path "HKCR:\$progID\shell\Convert with etl2pcapng" -Name '(Default)' -Type String -Value "Convert with etl2pcapng" -Force -EA Stop
+    }
+    catch 
+    {
+        # remove the OpenWithProgids entry
+        $null = Remove-ItemProperty -Path $rootOpenWith -Name $progID -Force -EA SilentlyContinue
+        Write-Error "Failed to create the Open With app: $_"
+    }
+    
     # check for the ETL extenstion in HKCR, create if missing
     Write-Verbose "Register-Etl2Pcapng: Add the context item to .etl files."
 
@@ -305,6 +439,7 @@ function Convert-Etl2Pcapng
         [System.IO.FileSystemInfo]
         $PSPath,
 
+        # Alternate output directory.
         [parameter( Position = 1,
             ParameterSetName = 'Path',
             ValueFromPipeline = $false )]
@@ -314,6 +449,7 @@ function Convert-Etl2Pcapng
         [string]
         $Out = $null,
 
+        # Search for ETL files in child directories.
         [parameter( Mandatory = $false,
             ParameterSetName = 'Path',
             ValueFromPipeline = $false )]
@@ -321,7 +457,27 @@ function Convert-Etl2Pcapng
             ParameterSetName = 'LiteralPath',
             ValueFromPipeline = $false )]
         [switch]
-        $Recurse
+        $Recurse,
+
+        # Accepts EULA and skips prompt.
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'Path',
+            ValueFromPipeline = $false )]
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'LiteralPath',
+            ValueFromPipeline = $false )]
+        [switch]
+        $AcceptEULA,
+
+        # Pauses the function at the end of execution. Used primarily for debugging with the context meny created by Register-Etl2Pcapng.
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'Path',
+            ValueFromPipeline = $false )]
+        [parameter( Mandatory = $false,
+            ParameterSetName = 'LiteralPath',
+            ValueFromPipeline = $false )]
+        [switch]
+        $Pause
     )
 
     Write-Verbose "Convert-Etl2Pcapng: Work! Work!"
@@ -406,13 +562,45 @@ function Convert-Etl2Pcapng
 
     ### get the path to etl2pcapng.exe
     Write-Verbose "Convert-Etl2Pcapng: Getting for etl2pcapng location."
-    $e2pPath = Update-Etl2Pcapng
+    try 
+    {
+        if ($AcceptEULA.IsPresent)
+        {
+            [string]$e2pPath = Update-Etl2Pcapng -AcceptEULA
+        }
+        else
+        {
+            [string]$e2pPath = Update-Etl2Pcapng
+        }
+        
+    }
+    catch 
+    {
+        return (Write-Error "Settings failure: $_" -EA Stop)
+    }
 
     # validate etl2pcapng is actually there and strip out the parent dir
     if ($e2pPath) 
     {
-        $isE2PFnd = Get-Item "$e2pPath" -EA SilentlyContinue
+        Write-Verbose "Convert-Etl2Pcapng: Received etl2pcapng location: '$e2pPath'"
 
+        # need this to trim a mysterious leading space when etl2pcapng is first downloaded and extracted
+        $e2pPath = $e2pPath.Trim(" ")
+
+        Write-Verbose "Convert-Etl2Pcapng: Validating etl2pcapng location: '$e2pPath'"
+
+        # putting this in a loop due to OneDrive delay shinanigans
+        $c = 0
+        do
+        {
+            Start-Sleep -m 250
+
+            $isE2PFnd = Get-Item "$e2pPath" -EA SilentlyContinue
+            Write-Verbose "Convert-Etl2Pcapng: Validated e2p path: $($isE2PFnd.FullName)"
+
+            $c++
+        } until ($isE2PFnd -or $c -ge 5)
+        
         if ($isE2PFnd) {
             $e2pDir = $isE2PFnd.DirectoryName
         }
@@ -420,6 +608,10 @@ function Convert-Etl2Pcapng
             Write-Error "Convert-Etl2Pcapng: Failed to locate etl2pcanpng.exe."
             return $null
         }
+    }
+    else
+    {
+        return $null
     }
 
     #### Finally do the conversion work ####
@@ -441,6 +633,11 @@ function Convert-Etl2Pcapng
     Pop-Location
 
     Write-Verbose "Convert-Etl2Pcapng: Work complete!"
+
+    if ($Pause.IsPresent)
+    {
+        $null = Read-Host "Press Enter to continue..."
+    }
 } #end Convert-Etl2Pcapng
 
 
@@ -450,7 +647,10 @@ function Convert-Etl2Pcapng
 function Update-Etl2Pcapng 
 {
     [CmdletBinding()]
-    param([switch]$Force)
+    param(
+        [switch]$Force,
+        [switch]$AcceptEULA
+        )
 
     <# 
      # Check for etl2pcapng updates only once a week
@@ -491,6 +691,48 @@ function Update-Etl2Pcapng
     $here = $settings.appDataPath
 
     Write-Verbose "Update-Etl2Pcapng - Timestamps:`nCurrent date:`t$((Get-Date).Date)`nSettings date:`t$($settings.LastUpdate.Date)`n"
+
+
+    # EULA prompt
+    if ($AcceptEULA.IsPresent)
+    {
+        $settings.SetEulaStatus($true)
+        Set-E2PSettings $settings
+    }
+    elseif ($settings.AcceptEULA -eq $false)
+    {
+        Write-Host @"
+Privacy Notice and End User License Agreement (EULA)
+This PowerShell module does not collect or upload data to Microsoft, third-parties, or Microsoft partners.
+
+Tracking and other statistical website data may be collected by PowerShellGallery.com when the module is downloaded, and by Github.com when the etl2pcapng.zip file is downloaded or updated by the module during cmdlet execution.
+
+By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact github.com to check, download, and extract etl2pcapng to this computer from github.com.
+
+"@
+
+        $c = 0
+        do
+        {
+            $answer = Read-Host "[A] Agree and continue, do not prompt in the future`n[Y] Agree once, prompt again (not recommended when using automation)`n[N] I do not agree, please terminate the script`nResponse"
+            $c++
+        } until ($answer -eq 'a' -or $answer -eq 'y' -or $answer -eq 'n' -or $c -gt 3)
+        
+        switch ($answer)
+        {
+            'a' 
+            { 
+                $settings.SetEulaStatus($true)
+                Set-E2PSettings $settings
+                break 
+            }
+            'y' { break }
+            'n' { return $null }
+            default { return (Write-Error "Failed to get a valid user response to the EULA." -EA Stop)}
+        }
+
+    }
+
 
     # check for an update when -Force set or it's been 7 days since we last checked
     if ($Force -or ((Get-Date).Date.AddDays(-7) -gt $settings.LastUpdate.Date)) 
@@ -653,9 +895,11 @@ function Update-Etl2Pcapng
     
     if ($isE2PFnd) 
     {
-        Write-Verbose "Update-Etl2Pcapng - Returning etl2pcapng.exe at $here\etl2pcapng\$arch\etl2pcapng.exe"
+        $fullPath = "$here\etl2pcapng\$arch\etl2pcapng.exe"
+        Write-Verbose "Update-Etl2Pcapng - Returning etl2pcapng.exe at '$fullPath'"
+        Write-Debug "Update-Etl2Pcapng - '$here'"
         Write-Verbose "Update-Etl2Pcapng - Work complete."
-        return ("$here\etl2pcapng\$arch\etl2pcapng.exe")
+        return $fullPath
     }
     else 
     {
@@ -807,7 +1051,7 @@ function Find-E2PPath
         return (Write-Error "Failed to find a current user module path." -EA Stop)
     }
 
-    Write-Verbose "Find-E2PPath - Returning: $here\Convert-Etl2Pcapng"
+    Write-Verbose "Find-E2PPath - Returning: '$here\Convert-Etl2Pcapng'"
     Write-Verbose "Find-E2PPath - End."
     return ("$here\Convert-Etl2Pcapng")
 }
@@ -869,7 +1113,21 @@ function Find-GitReleaseLatest
 
     $baseApiUri = "https://api.github.com/repos/$($repo)/releases/latest"
 
-
+    # make sure we don't try to use an insecure SSL/TLS protocol when downloading files
+    $secureProtocols = @() 
+    $insecureProtocols = @( [System.Net.SecurityProtocolType]::SystemDefault, 
+                            [System.Net.SecurityProtocolType]::Ssl3, 
+                            [System.Net.SecurityProtocolType]::Tls, 
+                            [System.Net.SecurityProtocolType]::Tls11) 
+    foreach ($protocol in [System.Enum]::GetValues([System.Net.SecurityProtocolType])) 
+    { 
+        if ($insecureProtocols -notcontains $protocol) 
+        { 
+            $secureProtocols += $protocol 
+        } 
+    } 
+    [System.Net.ServicePointManager]::SecurityProtocol = $secureProtocols
+    
     # get the available releases
     Write-Verbose "Find-GitReleaseLatest - Processing repro: $repo"
     Write-Verbose "Find-GitReleaseLatest - Making Github API call to: $baseApiUrl"
@@ -896,7 +1154,7 @@ function Find-GitReleaseLatest
     Write-Verbose "Find-GitReleaseLatest - Processing results."
     try
     {
-        [version]$version = ($rawReleases.Content | ConvertFrom-Json).tag_name
+        [version]$version = ($rawReleases.Content | ConvertFrom-Json).tag_name.Trim("v")
     }
     catch
     {
@@ -1010,6 +1268,7 @@ class E2PSettings
     [datetime]$LastUpdate
     [version]$CurrVersion
     [string]$appDataPath
+    [bool]$AcceptEULA
 
     #region construtors
     E2PSettings()
@@ -1017,6 +1276,7 @@ class E2PSettings
         $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
         $this.CurrVersion   = [version]::new()
         $this.appDataPath   = $null
+        $this.AcceptEULA    = $false
     }
 
     E2PSettings([string]$path)
@@ -1024,6 +1284,7 @@ class E2PSettings
         $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
         $this.CurrVersion   = [version]::new()
         $this.appDataPath   = $path
+        $this.AcceptEULA    = $false
     }
 
     E2PSettings([PSCustomObject]$set)
@@ -1031,6 +1292,7 @@ class E2PSettings
         $this.LastUpdate    = $set.LastUpdate
         $this.CurrVersion   = $set.CurrVersion
         $this.appDataPath   = $set.appDataPath
+        $this.AcceptEULA    = $set.AcceptEULA
     }
     #endregion construtors
 
@@ -1048,6 +1310,11 @@ class E2PSettings
     [string]GetAppDataPath()
     {
         return ($this.appDataPath)
+    }
+
+    [bool]GetEulaStatus()
+    {
+        return ($this.AcceptEULA)
     }
     #endregion getters
 
@@ -1076,6 +1343,11 @@ class E2PSettings
             $this.appDataPath = $appDataPath
         }
     }
+
+    SetEulaStatus([bool]$eulaStatus)
+    {
+        $this.AcceptEULA = $eulaStatus
+    }
     #endregion setters
 
 
@@ -1086,6 +1358,7 @@ class E2PSettings
 LastUpdate  : $($this.appDataPath)
 CurrVersion : $($this.CurrVersion)
 appDataPath : $($this.appDataPath)
+AcceptEULA  : $($this.AcceptEULA)
 "@)
     }
 
