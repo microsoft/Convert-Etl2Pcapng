@@ -1113,7 +1113,21 @@ function Find-GitReleaseLatest
 
     $baseApiUri = "https://api.github.com/repos/$($repo)/releases/latest"
 
-
+    # make sure we don't try to use an insecure SSL/TLS protocol when downloading files
+    $secureProtocols = @() 
+    $insecureProtocols = @( [System.Net.SecurityProtocolType]::SystemDefault, 
+                            [System.Net.SecurityProtocolType]::Ssl3, 
+                            [System.Net.SecurityProtocolType]::Tls, 
+                            [System.Net.SecurityProtocolType]::Tls11) 
+    foreach ($protocol in [System.Enum]::GetValues([System.Net.SecurityProtocolType])) 
+    { 
+        if ($insecureProtocols -notcontains $protocol) 
+        { 
+            $secureProtocols += $protocol 
+        } 
+    } 
+    [System.Net.ServicePointManager]::SecurityProtocol = $secureProtocols
+    
     # get the available releases
     Write-Verbose "Find-GitReleaseLatest - Processing repro: $repo"
     Write-Verbose "Find-GitReleaseLatest - Making Github API call to: $baseApiUrl"
@@ -1140,7 +1154,7 @@ function Find-GitReleaseLatest
     Write-Verbose "Find-GitReleaseLatest - Processing results."
     try
     {
-        [version]$version = ($rawReleases.Content | ConvertFrom-Json).tag_name
+        [version]$version = ($rawReleases.Content | ConvertFrom-Json).tag_name.Trim("v")
     }
     catch
     {
