@@ -49,7 +49,7 @@ function Register-Etl2Pcapng
     )
 
     Write-Verbose "Register-Etl2Pcapng - Work! Work!"
-
+    Write-Verbose "Convert-Etl2Pcapng: Using PowerShell Version $($PSVersionTable.PSVersion)"
     # test for Admin access
     Write-Verbose "Register-Etl2Pcapng - Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
@@ -220,15 +220,15 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
         Write-Verbose "Register-Etl2Pcapng - Detected pre-Windows 11. Using CMD as the base console."
         if ($UseVerbose) 
         {
-            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Verbose"
+            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo -Command Convert-Etl2Pcapng '%1' -Verbose"
         }
         elseif ($UseDebug) 
         {
-            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1'' -Debug -Verbose"
+            $cmd = "cmd /k $cli -NoProfile -NonInteractive -NoLogo -Command Convert-Etl2Pcapng '%1' -Debug -Verbose"
         }
         else 
         {
-            $cmd = "cmd /c $cli -NoProfile -NonInteractive -NoLogo Convert-Etl2Pcapng ''%1''"
+            $cmd = "cmd /c $cli -NoProfile -NonInteractive -NoLogo -Command Convert-Etl2Pcapng '%1'"
         }
     }
 
@@ -284,7 +284,7 @@ function Unregister-Etl2Pcapng
     #>
 
     Write-Verbose "Unregister-Etl2Pcapng: Work! Work!"
-
+    Write-Verbose "Convert-Etl2Pcapng: Using PowerShell Version $($PSVersionTable.PSVersion)"
     # test for Admin access
     Write-Verbose "Unregister-Etl2Pcapng: Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
@@ -480,7 +480,9 @@ function Convert-Etl2Pcapng
         $Pause
     )
 
+
     Write-Verbose "Convert-Etl2Pcapng: Work! Work!"
+    Write-Verbose "Convert-Etl2Pcapng: Using PowerShell Version $($PSVersionTable.PSVersion)"
 
     ### Validating paths and parameters ###
     # check the path param
