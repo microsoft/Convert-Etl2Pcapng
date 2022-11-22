@@ -10,7 +10,9 @@ etl2pcapng was built to extract packets out of ETL files and convert them to a W
 
 # Install
 
-The module can be downloaded using the following command in PowerShell.
+## New
+
+The module can be downloaded using the following command in PowerShell. The module is downloaded from the [PowerShell Gallery](https://www.powershellgallery.com/packages/Convert-Etl2Pcapng).
 
 ```PowerShell
 Install-Module Convert-Etl2Pcapng -Scope CurrentUser
@@ -22,6 +24,23 @@ Use this command to install without any prompts, assuming you accept the MIT lic
 Install-Module Convert-Etl2Pcapng -Scope CurrentUser -Force
 ```
 
+## Updating
+
+The Update-Module cmdlet can be used to install newer versions of the module if it is already installed.
+
+```PowerShell
+Update-Module Convert-Etl2Pcapng -Scope CurrentUser
+```
+
+-OR-
+
+```PowerShell
+# suppresses any untrusted repository prompts
+Update-Module Convert-Etl2Pcapng -Scope CurrentUser -Force
+```
+
+## Install Issues
+
 It is possible that a new version of PowerShellGet will be needed before the module will install from PSGallery. Run these three commands to update all the necessary components, restart PowerShell, and then try to install Convert-Etl2Pcapng again.
 
 ```PowerShell
@@ -31,6 +50,8 @@ It is possible that a new version of PowerShellGet will be needed before the mod
     
     # A restart of PowerShell is required if the module was updated
  ```
+
+## Context Menu Issues
 
 Re-registering the right-click context menu usually fixes any issues with that feature.
 
