@@ -309,6 +309,15 @@ function Unregister-Etl2Pcapng
         Remove-Item "HKCR:\Convert-Etl2Pcapng" -Recurse -Force -EA SilentlyContinue
     }
 
+    # same thing, but with Convert-Etl2Pcapng.etl
+    $test = Get-Item "HKCR:\Convert-Etl2Pcapng.etl" -EA SilentlyContinue
+    if ($test)
+    {
+        Write-Verbose "Unregister-Etl2Pcapng: Removing Convert-Etl2Pcapng.etl HKCR app."
+        Remove-Item "HKCR:\Convert-Etl2Pcapng.etl" -Recurse -Force -EA SilentlyContinue
+    }
+
+    # clean up legacy key
     $isOld = Get-ItemProperty -LiteralPath "HKCR:\.etl" -Name '(Default)' -EA SilentlyContinue
     if ($isOld.'(default)' -eq 'Convert-Etl2Pcapng')
     {
@@ -317,11 +326,21 @@ function Unregister-Etl2Pcapng
         Set-ItemProperty -LiteralPath "HKCR:\.etl" -Name '(Default)' -Value "" -Force -EA SilentlyContinue
     }
 
+
+    # clean up .etl stuff
     $test = Get-ItemProperty -LiteralPath "HKCR:\.etl" -Name 'Convert-Etl2Pcapng' -EA SilentlyContinue
     if ( $test )
     {
         Remove-ItemProperty -LiteralPath "HKCR:\.etl" -Name 'Convert-Etl2Pcapng' -Force 
     }
+
+    # cleanup modern .etl location
+    $test = Get-ItemProperty -LiteralPath "HKCR:\.etl\OpenWithProgids" -Name 'Convert-Etl2Pcapng.etl' -EA SilentlyContinue
+    if ( $test )
+    {
+        Remove-ItemProperty -LiteralPath "HKCR:\.etl\OpenWithProgids" -Name 'Convert-Etl2Pcapng.etl' -Force 
+    }
+
 
     # remove the SystemFileAssociation
     $rootPath = "HKCR:\SystemFileAssociations\.etl\shell\Convert-Etl2Pcapng"
@@ -667,6 +686,8 @@ function Update-Etl2Pcapng
 
     Write-Verbose "Update-Etl2Pcapng - Starting"
 
+    <# currently not used. Leaving in case multiple archs are supported in the future
+
     # check if etlpcapng is already downloaded - do not use pwsh terney to maintain Windows PowerShell backwards compatibilty!
     if ([System.Environment]::Is64BitOperatingSystem) 
     {
@@ -675,6 +696,7 @@ function Update-Etl2Pcapng
     else {
         $arch = "x86"    
     }
+    #>
 
     Write-Verbose "Update-Etl2Pcapng - OS architecture is $arch."
 
@@ -759,65 +781,8 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
         {
             Write-Verbose "Update-Etl2Pcapng - Cleaning up existing files."
             # delete existing zip file
-            $isZipFnd = Get-Item "$here\etl2pcapng.zip" -EA SilentlyContinue
-            if ($isZipFnd) { Remove-Item "$here\etl2pcapng.zip" -Force | Out-Null }
-            
-            # make sure VC Redist is installed
-            Write-Verbose "Update-Etl2Pcapng - Checking for Visual Studio C++ Redistribution install."
-
-            <# 
-            # vcdist no longer needed as of version 1.5.0
-            #look for VS C++ 2015-2019
-            $isVCRedistFnd = Find-E2PSoftware "Microsoft Visual C\+\+ 2015-2019 Redistributable \($arch\)"
-            
-            if (-NOT $isVCRedistFnd -and ()) 
-            {
-                if ($arch -eq "x64") 
-                {
-                    $URI = $settings.vcredist64Uri
-                }
-                else 
-                {
-                    $URI = $settings.vcredist32Uri
-                }
-
-                Write-Verbose "Update-Etl2Pcapng - Downloading Microsoft Visual C\+\+ 2015-2019 Redistributable from $URI`."
-
-                # download vcredist
-                try 
-                {
-                    $dl = Get-WebFile -Uri $URI -savePath "$here" -fileName "vcredist.exe" -EA Stop
-                }
-                catch 
-                {
-                    return (Write-Error "Update-Etl2Pcapng - Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`) is not installed and could not be downloaded. Please manually download and install from $URI before using etl2pcapng. Error: $_" -EA Stop)
-                }
-
-                # try to install vcredist
-                try 
-                {
-                    Push-Location $here
-                    Write-Verbose "Update-Etl2Pcapng - Installing Microsoft Visual C\+\+ 2015-2019 Redistributable."
-                    .\vcredist.exe /install /quiet /log "$here\Install_vc_redist_2017_x64.log"
-                }
-                catch 
-                {
-                    return (Write-Error "Update-Etl2Pcapng - Failed to install Microsoft Visual C`+`+ 2015-2019 Redistributable `($arch`). Please download from $URI and install before continuing." -EA Stop)
-                }
-                finally
-                {
-                    # cleanup
-                    Pop-Location
-                    Start-Sleep 1
-                    Remove-Item "$here\vcredist.exe" -Force -EA SilentlyContinue | Out-Null
-                }
-
-                # only cleanup the log file if the install succeeds and we don't need it
-                Remove-Item "$here\Install*.log" -Force -EA SilentlyContinue | Out-Null
-                Write-Verbose "Update-Etl2Pcapng - VC redist installed."
-            }
-            #>
-            
+            #$isZipFnd = Get-Item "$here\etl2pcapng.zip" -EA SilentlyContinue
+            #if ($isZipFnd) { Remove-Item "$here\etl2pcapng.zip" -Force | Out-Null }
             
             # remove the existing etl2pcapng
             $isDirFnd = Get-Item "$here\etl2pcapng" -EA SilentlyContinue
@@ -853,14 +818,21 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
             # grab the etl2pcapng tags page from GitHub
             try 
             {
-                $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here" -fileName "etl2pcapng.zip" -EA Stop
+                # Version 1.10.0 is an uncompressed binary
+                # $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here" -fileName "etl2pcapng.zip" -EA Stop
+                $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here\etl2pcapng" -fileName "etl2pcapng.exe" -EA Stop
             }
             catch 
             {
                 return (Write-Error "Update-Etl2Pcapng - Cannot reach the etl2pcapng GitHub page: $_" -EA Stop)
             }
         
-            # extract and overwrite
+            <# 
+            
+            # There is no ZIP file as of etl2pcapng version 1.10.0. Only an uncompressed x64 binary. 
+            # Leaving this code here, coommented out, in case that changes in the future.
+            
+            #extract and overwrite
             Write-Verbose "Update-Etl2Pcapng - Extracting the etl2pcapng archive."
             try 
             {
@@ -875,11 +847,15 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
             Write-Verbose "Update-Etl2Pcapng - Cleaning up the zip file."
             $isZipFnd = Get-Item "$e2pPath" -EA SilentlyContinue
             if ($isZipFnd) { Remove-Item "$e2pPath" -Force -EA SilentlyContinue | Out-Null }
+            #>
 
             # update the installed version
             [version]$version = $latest.Version
             Write-Verbose "Update-Etl2Pcapng - Updating version in settings to $($version.ToString())"
             $settings.SetCurrVersion($version)
+            Write-Verbose "Update-Etl2Pcapng - here: $here"
+            $settings.SetAppDataPath($here)
+            $settings.SetE2PPath($e2pPath)
         }
 
         # update Settings.LastUpdate
@@ -888,16 +864,19 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
         $settings.SetLastUpdate($updateTime)
         
         Write-Verbose "Update-Etl2Pcapng - Saving E2P settings changes."
+        Write-Verbose "Update-Etl2Pcapng - Settings:`n$($settings.ToString())"
         Set-E2PSettings $settings
     }
 
     
-    $isE2PFnd = Get-Item "$here\etl2pcapng\$arch\etl2pcapng.exe" -EA SilentlyContinue
+    #$isE2PFnd = Get-Item "$here\etl2pcapng\$arch\etl2pcapng.exe" -EA SilentlyContinue
+    $isE2PFnd = Get-Item "$here\etl2pcapng\etl2pcapng.exe" -EA SilentlyContinue
 
     
     if ($isE2PFnd) 
     {
-        $fullPath = "$here\etl2pcapng\$arch\etl2pcapng.exe"
+        #$fullPath = "$here\etl2pcapng\$arch\etl2pcapng.exe"
+        $fullPath = "$here\etl2pcapng\etl2pcapng.exe"
         Write-Verbose "Update-Etl2Pcapng - Returning etl2pcapng.exe at '$fullPath'"
         Write-Debug "Update-Etl2Pcapng - '$here'"
         Write-Verbose "Update-Etl2Pcapng - Work complete."
@@ -986,15 +965,19 @@ function Set-E2PSettings
         [PSCustomObject]$settings
     )
 
+    Write-Verbose "Set-E2PSettings - Begin!"
+    Write-Verbose "Set-E2PSettings - Settings:`n$($settings.ToString())"
     $isAPDFnd = Get-Item "$($settings.appDataPath)" -EA SilentlyContinue
 
     try 
     {
         if (-NOT $isAPDFnd)
         {
+            Write-Verbose "Set-E2PSettings - Creating appDatPath: $($settings.appDataPath)"
             New-Item -Path "$($settings.appDataPath)" -ItemType Directory -Force -EA Stop | Out-Null
         }
 
+        Write-Verbose "Set-E2PSettings - Exporting settings to $($settings.appDataPath)\settings.xml"
         $settings | Export-Clixml -Path "$($settings.appDataPath)\settings.xml" -Depth 10 -Force -EA Stop
     }
     catch 
@@ -1002,6 +985,7 @@ function Set-E2PSettings
         return (Write-Error "Failed to write settings.xml to $($settings.appDataPath): $_" -EA Stop)
     }
 
+    Write-Verbose "Set-E2PSettings - End!"
     return $null
 }
 
@@ -1089,6 +1073,12 @@ function Get-WebFile
 
     try 
     {
+        if (-NOT (Test-Path $savePath)) 
+        { 
+            Write-Verbose "Get-WebFile - Creating save path: $savePath"
+            $null = mkdir "$savePath" -Force -EA Stop
+        }
+
         Invoke-WebRequest -Uri $URI -OutFile "$savePath\$fileName"
     } 
     catch 
@@ -1270,6 +1260,7 @@ class E2PSettings
     [datetime]$LastUpdate
     [version]$CurrVersion
     [string]$appDataPath
+    [string]$E2PPath
     [bool]$AcceptEULA
 
     #region construtors
@@ -1278,6 +1269,7 @@ class E2PSettings
         $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
         $this.CurrVersion   = [version]::new()
         $this.appDataPath   = $null
+        $this.E2PPath       = $null
         $this.AcceptEULA    = $false
     }
 
@@ -1286,6 +1278,7 @@ class E2PSettings
         $this.LastUpdate    = [datetime]::FromFileTimeUtc(0)
         $this.CurrVersion   = [version]::new()
         $this.appDataPath   = $path
+        $this.E2PPath       = $null
         $this.AcceptEULA    = $false
     }
 
@@ -1294,6 +1287,7 @@ class E2PSettings
         $this.LastUpdate    = $set.LastUpdate
         $this.CurrVersion   = $set.CurrVersion
         $this.appDataPath   = $set.appDataPath
+        $this.E2PPath       = $set.E2PPath
         $this.AcceptEULA    = $set.AcceptEULA
     }
     #endregion construtors
@@ -1312,6 +1306,11 @@ class E2PSettings
     [string]GetAppDataPath()
     {
         return ($this.appDataPath)
+    }
+
+    [string]GetE2PPath()
+    {
+        return ($this.E2PPath)
     }
 
     [bool]GetEulaStatus()
@@ -1346,6 +1345,14 @@ class E2PSettings
         }
     }
 
+    SetE2PPath([string]$E2PPath)
+    {
+        if ($null -ne $E2PPath)
+        {
+            $this.E2PPath = $E2PPath
+        }
+    }
+
     SetEulaStatus([bool]$eulaStatus)
     {
         $this.AcceptEULA = $eulaStatus
@@ -1360,6 +1367,7 @@ class E2PSettings
 LastUpdate  : $($this.appDataPath)
 CurrVersion : $($this.CurrVersion)
 appDataPath : $($this.appDataPath)
+E2PPath     : $($this.E2PPath)
 AcceptEULA  : $($this.AcceptEULA)
 "@)
     }
