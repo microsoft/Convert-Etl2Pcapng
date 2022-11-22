@@ -190,6 +190,10 @@ Version | Supported
 7.2 LTS | Yes :white_check_mark:
 7.3     | Yes :white_check_mark:
 
+Windows Terminal and the classic PowerShell console are both supported. Windows 11 22H2+, which uses Terminal as the default, is also supported.
+
+PowerShell 7 and Windows Terminal are recommended.
+
 
 # Contributing
 
