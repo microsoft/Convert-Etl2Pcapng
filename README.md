@@ -32,6 +32,13 @@ It is possible that a new version of PowerShellGet will be needed before the mod
     # A restart of PowerShell is required if the module was updated
  ```
 
+Re-registering the right-click context menu usually fixes any issues with that feature.
+
+```PowerShell
+Unregister-Etl2Pcapng
+Register-Etl2Pcapng
+```
+
 
 # Usage
 
