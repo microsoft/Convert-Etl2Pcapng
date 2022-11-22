@@ -163,7 +163,6 @@ Register-Etl2Pcapng -UseVerbose
 All cmdlets also support stream redirection for troubleshooting.
 
 
-
 # Privacy
 
 This PowerShell module does not collect or upload data to Microsoft, third-parties, or partners. 
@@ -173,6 +172,24 @@ Tracking and other statistical website data may be collected by PowerShellGaller
 # Support
 
 All support for the Convert-Etl2Pcapng module is handled through the [Convert-Etl2Pcapng Github Issues](https://github.com/microsoft/Convert-Etl2Pcapng/issues) page. The Microsoft support organizations do not, and cannot, support this module since it is an OSS project and not an in-box product component or feature.
+
+## Supported versions of PowerShell
+
+Convert-Etl2Pcapng is only supported on Windows. Parts of the module will technically run on PowerShell 7 in Linux, macOS, and FreeBSD, but the required etl2pcapng.exe is currently a Windows-only binary.
+
+Version | Supported
+------  | ------
+1.x     | No :x:
+2.x     | No :x:
+3.x     | No :x:
+4.x     | No :x:
+5.0     | No :x:
+5.1     | Yes :white_check_mark:
+6.x     | No :x:
+7.1     | No :x:
+7.2 LTS | Yes :white_check_mark:
+7.3     | Yes :white_check_mark:
+
 
 # Contributing
 
