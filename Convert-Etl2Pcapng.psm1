@@ -607,7 +607,7 @@ function Convert-Etl2Pcapng
             $e2pDir = $isE2PFnd.DirectoryName
         }
         else {
-            Write-Error "Convert-Etl2Pcapng: Failed to locate etl2pcanpng.exe."
+            Write-Error "Convert-Etl2Pcapng: Failed to locate etl2pcapng.exe."
             return $null
         }
     }
@@ -853,29 +853,37 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
             # grab the etl2pcapng tags page from GitHub
             try 
             {
-                $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here" -fileName "etl2pcapng.zip" -EA Stop
+                $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here" -fileName $latest.FileName -EA Stop
             }
             catch 
             {
                 return (Write-Error "Update-Etl2Pcapng - Cannot reach the etl2pcapng GitHub page: $_" -EA Stop)
             }
         
-            # extract and overwrite
-            Write-Verbose "Update-Etl2Pcapng - Extracting the etl2pcapng archive."
-            try 
-            {
-                Expand-Archive "$e2pPath" $here -Force -EA Stop    
-            }
-            catch 
-            {
-                return (Write-Error "Update-Etl2Pcapng - Could not extract etl2pcapng. Error: $_" -EA Stop)
-            }
-            
-            # cleanup the zip
-            Write-Verbose "Update-Etl2Pcapng - Cleaning up the zip file."
-            $isZipFnd = Get-Item "$e2pPath" -EA SilentlyContinue
-            if ($isZipFnd) { Remove-Item "$e2pPath" -Force -EA SilentlyContinue | Out-Null }
-
+			if($latest.FileName.EndsWith(".zip")) {
+				# extract and overwrite
+				Write-Verbose "Update-Etl2Pcapng - Extracting the etl2pcapng archive."
+				try 
+				{
+					Expand-Archive "$e2pPath" $here -Force -EA Stop    
+				}
+				catch 
+				{
+					return (Write-Error "Update-Etl2Pcapng - Could not extract etl2pcapng. Error: $_" -EA Stop)
+				}
+				
+				# cleanup the zip
+				Write-Verbose "Update-Etl2Pcapng - Cleaning up the zip file."
+				$isZipFnd = Get-Item "$e2pPath" -EA SilentlyContinue
+				if ($isZipFnd) { Remove-Item "$e2pPath" -Force -EA SilentlyContinue | Out-Null }
+			}
+			else {
+				# Assuming x64 for the etl2pcapng binary
+				Push-Location $here
+				New-Item -Path "etl2pcapng\$arch" -ItemType Directory -EA SilentlyContinue -Force | Out-Null
+				Move-Item $latest.FileName "etl2pcapng\$arch\$($latest.FileName)" -Force
+				Pop-Location
+			}
             # update the installed version
             [version]$version = $latest.Version
             Write-Verbose "Update-Etl2Pcapng - Updating version in settings to $($version.ToString())"
@@ -1168,13 +1176,14 @@ function Find-GitReleaseLatest
     $dlURI = ($rawReleases.Content | ConvertFrom-Json).Assets.browser_download_url
 
     Write-Verbose "Find-GitReleaseLatest - Found download URL: $dlURI"
-
+	$fileName = $dlURI.Split("/")[-1]
     Write-Verbose "Find-GitReleaseLatest - End"
 
     return ([PSCustomObject]@{
         Repo    = $repo
         Version = $version
         URL     = $dlURI
+		FileName = $fileName
     })
 } #end Find-GitReleaseLatest
 
