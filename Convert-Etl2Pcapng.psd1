@@ -23,7 +23,7 @@ produces packet capture events) to pcapng format (readable by Wireshark).
 RootModule = 'Convert-Etl2Pcapng.psm1'
 
 # Version number of this module.
-ModuleVersion = '2022.11.22'
+ModuleVersion = '2025.07.231'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
