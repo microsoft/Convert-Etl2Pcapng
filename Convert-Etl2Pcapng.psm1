@@ -11,15 +11,16 @@ produces packet capture events) to pcapng format (readable by Wireshark).
 
 To-DO:
 
+- DONE - Added icon.
 - DONE - ISSUE 12 (GI12): Force a unregister/register on version change
   - Unregister deletes settings, so I don't want to do this.
   - Instead I added logic to update settings on version change.
   - In the future, I can add an update function that automates any changes.
-- ISSUE 13 (GI12): Add check for wt.exe
+- DONE - ISSUE 13 (GI12): Add check for wt.exe
 - DONE - ISSUE 14/15 (GI15): *-Etl2pcapng fails to write settings
 - DONE - ISSUE 16 (GI16): Add pktmon support.
-- ISSUE 17 (GI17): Fix right-click context menu for Windows 11
-- 
+- DONE - ISSUE 17 (GI17): Fix right-click context menu for Windows 11 ... this started working in newer Win11.
+- DONE - GI19 - fix download of etl2pcapng
 
 
 #>
@@ -27,7 +28,7 @@ To-DO:
 
 ### CONSTANTS ###
 # version of Convert-Etl2Pcapng
-$script:CurrentE2PVersion = "2025.12.0001"
+$script:CurrentE2PVersion = "2025.12.02"
 
 
 ################
@@ -74,7 +75,7 @@ function Register-Etl2Pcapng {
     Write-Verbose "Register-Etl2Pcapng - Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
     {
-        return (Write-Error "Register-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again." -EA Stop)
+        return (Write-Error "Register-Etl2Pcapng - Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again." -EA Stop)
     }
 
     # read settings.xml
@@ -134,7 +135,7 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
     }
 
     # make sure the module is installed, just in case
-    Write-Verbose "Register-Etl2Pcapng: Verify this is running from the module."
+    Write-Verbose "Register-Etl2Pcapng - Verify this is running from the module."
     $isModFnd = Get-Module -ListAvailable Convert-ETL2PCAPNG -EA SilentlyContinue
 
     if (-NOT $isModFnd) {
@@ -148,7 +149,7 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
     }
 
     # create a PSDrive to HKEY_CLASSES_ROOT
-    Write-Verbose "Register-Etl2Pcapng: Create PSDrive for HKEY_CLASSES_ROOT."
+    Write-Verbose "Register-Etl2Pcapng - Create PSDrive for HKEY_CLASSES_ROOT."
     if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
     {
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
@@ -167,12 +168,12 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
         }
         catch 
         {
-            Write-Warning "Failed to cleanup older Convert-Etl2Pcapng registration. This is a non-terminating warning."
+            Write-Warning "Failed to cleanup older Convert-Etl2Pcapng registration."
         }
     }
 
     # create the shell extension for etl2pcapng
-    Write-Verbose "Register-Etl2Pcapng: Add the Convert-Etl2Pcapng app to HKCR:\SystemFileAssociations\.etl to prevent possible conflicts."
+    Write-Verbose "Register-Etl2Pcapng - Add the Convert-Etl2Pcapng app to HKCR:\SystemFileAssociations\.etl to prevent possible conflicts."
 
     if (-NOT (New-RegKey "$rootPath\Command" Directory)) { Write-Error "Could not create directory in SystemFileAssociations."; exit }
 
@@ -206,20 +207,21 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
     # discover the current shell since currentuser scope puts the module in different places in 7+ than 5.1.
     # powershell = Windows PowerShell 5.1
     # pwsh       = PowerShell 7+
-    if ($host.Version.Major -eq 5)
-    {
+    if ($host.Version.Major -eq 5) {
         Write-Verbose "Register-Etl2Pcapng - Detected Windows PowerShell."
         $cli = "powershell.exe"
-    }
-    else
-    {
+    } else {
         Write-Verbose "Register-Etl2Pcapng - Detected PowerShell 7."
         $cli = "pwsh.exe"
     }
 
     # if this is Win11 then we can use Windows Terminal (wt)
-    if ( [System.Environment]::OSVersion.Version.Build -ge 22000 )
-    {    
+    # GI12 - Remove WT test based on OS because WT can be uninstalled. I don't know why you would want to, but you can.
+    # GI12 - Search for the wt.exe command
+    $wCommands = Get-Command w* -CommandType Application -EA Ignore
+    
+    # GI12 - use wt.exe when detected
+    if ( $wCommands.Name -contains 'wt.exe' ) {    
         Write-Verbose "Register-Etl2Pcapng - Detected Windows 11. Using Windows Terminal as the base console."
 
         if ($UseVerbose) 
@@ -234,9 +236,7 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
         {
             $cmd = "wt $cli -NoProfile -Command Convert-Etl2Pcapng '`"%1`"'"
         }
-    }
-    else
-    {    
+    } else {    
         Write-Verbose "Register-Etl2Pcapng - Detected pre-Windows 11. Using CMD as the base console."
         if ($UseVerbose) 
         {
@@ -253,29 +253,44 @@ WARNING: You must accept the EULA to register Convert-Etl2Pcapng as a context me
     }
 
 
-    Write-Verbose "Register-Etl2Pcapng: Add Convert-ETL2PCAPNG command: $cmd"
+    Write-Verbose "Register-Etl2Pcapng - Add Convert-ETL2PCAPNG command: $cmd"
     if (-NOT (New-RegKey "$rootPath\Command" -Value $cmd)) { Write-Error "Could not write command to registry."; exit }
 
 
     # create the progID key structure and add the command for the open with menu
     $rootProgID = "HKCR:\$progID\shell\Convert with etl2pcapng\command"
-    try 
-    {
+    try {
         $null = New-Item $rootProgID -Force -EA Stop
         Set-ItemProperty -Path $rootProgID -Name '(Default)' -Type String -Value $cmd -Force -EA Stop
         Set-ItemProperty -Path "HKCR:\$progID\shell\Convert with etl2pcapng" -Name '(Default)' -Type String -Value "Convert with etl2pcapng" -Force -EA Stop
-    }
-    catch 
-    {
+        Set-ItemProperty -Path "HKCR:\$progID\shell\Convert with etl2pcapng" -Name 'MUIVerb' -Type String -Value "Convert with etl2pcapng" -Force -EA Stop
+    } catch {
         # remove the OpenWithProgids entry
         $null = Remove-ItemProperty -Path $rootOpenWith -Name $progID -Force -EA SilentlyContinue
         Write-Error "Failed to create the Open With app: $_"
     }
+
+    # copy the icon, when found, to localappdata\Convert-Elt2Pcapng and add the DefaultIcon registry entry
+    $iconPath = "$PSScriptRoot\e2p.ico"
+    if ((Test-Path "$iconPath" -EA Ignore)) {
+        # copy
+        Write-Verbose "Register-Etl2Pcapng - Copying e2p.ico to local app data."
+        $r = Copy-Item "$iconPath" "$env:LocalAppData\Convert-Etl2Pcapng" -Force -PassThru
+        Write-Debug "Register-Etl2Pcapng - Copy icon result:`n$($r | Out-String)`n"
+
+        # add reg value
+        Write-Verbose "Register-Etl2Pcapng - Add default icon."
+        $null = New-Item "HKCR:\$progID\DefaultIcon" -Force
+        $r = Set-ItemProperty -Path "HKCR:\$progID\DefaultIcon" -Name '(Default)' -Type String -Value '%LocalAppData%\Convert-Etl2Pcapng\e2p.ico' -Force -PassThru -EA Ignore
+
+        Write-Debug "Register-Etl2Pcapng - DefaultIcon add result:`n$($r | Out-String)`n"
+    }
+
     
     # check for the ETL extenstion in HKCR, create if missing
-    Write-Verbose "Register-Etl2Pcapng: Add the context item to .etl files."
+    Write-Verbose "Register-Etl2Pcapng - Add the context item to .etl files."
 
-    Write-Verbose "Register-Etl2Pcapng: Work complete!"
+    Write-Verbose "Register-Etl2Pcapng - Work complete!"
 } #end Register-Etl2Pcapng
 
 
@@ -307,18 +322,18 @@ function Unregister-Etl2Pcapng {
         Windows Networking Blog     : https://blogs.technet.microsoft.com/networking/
     #>
 
-    Write-Verbose "Unregister-Etl2Pcapng: Work! Work!"
+    Write-Verbose "UnRegister-Etl2Pcapng - Work! Work!"
     Write-Verbose "Convert-Etl2Pcapng - Using PowerShell Version $($PSVersionTable.PSVersion)"
     # test for Admin access
-    Write-Verbose "Unregister-Etl2Pcapng: Test admin rights."
+    Write-Verbose "UnRegister-Etl2Pcapng - Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
     {
-        Write-Error "Unregister-Etl2Pcapng: Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again."
+        Write-Error "UnRegister-Etl2Pcapng - Administrator rights are needed to execute this command. Please run PowerShell as Administrator and try again."
         return $null
     }
 
     # create a PSDrive to HKEY_CLASSES_ROOT
-    Write-Verbose "Unregister-Etl2Pcapng: Creating HKCR PSDrive."
+    Write-Verbose "UnRegister-Etl2Pcapng - Creating HKCR PSDrive."
     if (-NOT (Get-PSDrive -Name HKCR -EA SilentlyContinue)) 
     {
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -Scope Local | Out-Null
@@ -329,7 +344,7 @@ function Unregister-Etl2Pcapng {
     $test = Get-Item "HKCR:\Convert-Etl2Pcapng" -EA SilentlyContinue
     if ($test)
     {
-        Write-Verbose "Unregister-Etl2Pcapng: Removing Convert-Etl2Pcapng HKCR app."
+        Write-Verbose "UnRegister-Etl2Pcapng - Removing Convert-Etl2Pcapng HKCR app."
         Remove-Item "HKCR:\Convert-Etl2Pcapng" -Recurse -Force -EA SilentlyContinue
     }
 
@@ -337,7 +352,7 @@ function Unregister-Etl2Pcapng {
     $test = Get-Item "HKCR:\Convert-Etl2Pcapng.etl" -EA SilentlyContinue
     if ($test)
     {
-        Write-Verbose "Unregister-Etl2Pcapng: Removing Convert-Etl2Pcapng.etl HKCR app."
+        Write-Verbose "UnRegister-Etl2Pcapng - Removing Convert-Etl2Pcapng.etl HKCR app."
         Remove-Item "HKCR:\Convert-Etl2Pcapng.etl" -Recurse -Force -EA SilentlyContinue
     }
 
@@ -346,7 +361,7 @@ function Unregister-Etl2Pcapng {
     if ($isOld.'(default)' -eq 'Convert-Etl2Pcapng')
     {
         # remove the default to .etl, but don't delete it
-        Write-Verbose "Unregister-Etl2Pcapng: Cleanup .etl extension option."
+        Write-Verbose "UnRegister-Etl2Pcapng - Cleanup .etl extension option."
         Set-ItemProperty -LiteralPath "HKCR:\.etl" -Name '(Default)' -Value "" -Force -EA SilentlyContinue
     }
 
@@ -375,13 +390,13 @@ function Unregister-Etl2Pcapng {
         try {
             Remove-Item $rootPath -Recurse -Force -ErrorAction Stop    
         } catch {
-            Write-Error "Unregister-Etl2Pcapng: Failed to cleanup the SystemFileAssociations."
+            Write-Error "UnRegister-Etl2Pcapng - Failed to cleanup the SystemFileAssociations."
         }
     }
     
 
     # clean up the user folder
-    Write-Verbose "Unregister-Etl2Pcapng: Cleaning up appDataPath directory."
+    Write-Verbose "UnRegister-Etl2Pcapng - Cleaning up appDataPath directory."
     
     # read settings.xml
     $settings = Get-E2PSettings
@@ -421,10 +436,10 @@ function Unregister-Etl2Pcapng {
             $null = Remove-Item "$($settings.appDataPath)\etl2pcapng.exe" -Force -EA SilentlyContinue 
         }
     } catch {
-        Write-Error "Unregister-Etl2Pcapng: Failed to cleanup the LocalAppData: $($settings.appDataPath)"
+        Write-Error "UnRegister-Etl2Pcapng - Failed to cleanup the LocalAppData: $($settings.appDataPath)"
     }
     
-    Write-Verbose "Unregister-Etl2Pcapng: Work complete!"
+    Write-Verbose "UnRegister-Etl2Pcapng - Work complete!"
 } #end Unregister-Etl2Pcapng
 
 
@@ -600,14 +615,11 @@ function Convert-Etl2Pcapng {
 
 
     ### get the path to etl2pcapng.exe
-    Write-Verbose "Convert-Etl2Pcapng - Getting for etl2pcapng location."
+    Write-Verbose "Convert-Etl2Pcapng - Getting etl2pcapng location."
     try {
-        if ($AcceptEULA.IsPresent)
-        {
+        if ($AcceptEULA.IsPresent) {
             [string]$e2pPath = Update-Etl2Pcapng -AcceptEULA
-        }
-        else
-        {
+        } else {
             [string]$e2pPath = Update-Etl2Pcapng
         }
         
@@ -700,7 +712,6 @@ function Update-Etl2Pcapng {
 
 
     Write-Verbose "Update-Etl2Pcapng - Starting"
-    Write-Verbose "Update-Etl2Pcapng - OS architecture is $arch."
 
     # read settings.xml
     $settings = Get-E2PSettings
@@ -879,6 +890,10 @@ function Get-E2PSettings {
             Write-Verbose "Get-E2PSettings - Copying: $file"
             $null = Move-Item "$cuModPath\Convert-Etl2Pcapng\$file" -Destination "$rootPath" -Force
         }
+
+        # remove <old path>\etl2pcapng
+        $null = Remove-Item "$cuModPath\Convert-Etl2Pcapng\etl2pcapng" -Force -Recurse -EA Ignore
+
         Write-Verbose "Get-E2PSettings - Migration complete."
     }
     ##
@@ -965,8 +980,7 @@ function Set-E2PSettings {
 }
 
 
-function New-E2PSetting
-{
+function New-E2PSetting {
     [string]$here = Find-E2PPath
 
     # create default settings
@@ -977,44 +991,29 @@ function New-E2PSetting
 
 
 function Find-E2PPath {
-    if ( -NOT [string]::IsNullOrEmpty($script:here) ) {
+    # GI19 - Force a path update if settings are not found in LocalAppData
+    if ( -NOT [string]::IsNullOrEmpty($script:here) -and $script:here -match [regex]::Escape("$env:LocalAppData")) {
         Write-Verbose "Find-E2PPath - We've already got one, it's very nice: $here"
         return $script:here
     }
 
-    Write-Verbose "Find-E2PPath - Searching for installed module."
-    # make sure the running module
-    $mods = Get-Module Convert-Etl2Pcapng -EA SilentlyContinue
+    # GI19 - Never fall back to old settings. Always use LocalAppData
+    # GI15 - The CurrentUser PSModulePath is in Documents\PowerShell or OneDrive\Documents\PowerShell
+    #        The original code did not take this into account.
+    #        
+    #       original code: $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE"))" }
+    #
+    #       New process: Always use LocalAppData to avoid redirects of the Documents dir.
+    #
+    #       The SYSTEM and Local Service accounts will use C:\WINDOWS\system32\config\systemprofile\AppData\Local for $env:LocalAppData, 
+    #           so this should work with automated processes that might be using this script.
 
-    # fall back to listed modules if none are running
-    if (-NOT $mods) {
-        $mods = Get-Module -ListAvailable Convert-Etl2Pcapng -EA SilentlyContinue
-    }
-    
-    if ($mods) {
-        # GI15: The CurrentUser PSModulePath is in Documents\PowerShell or OneDrive\Documents\PowerShell
-        #        The original code did not take this into account.
-        #        
-        #       original code: $here = $env:PSModulePath -split ';' | Where-Object { $_ -match "$([regex]::Escape("$env:USERPROFILE"))" }
-        #
-        #       New process: Always use LocalAppData to avoid redirects of the Documents dir.
-        #
-        #       The SYSTEM and Local Service accounts will use C:\WINDOWS\system32\config\systemprofile\AppData\Local for $env:LocalAppData, 
-        #           so this should work with automated processes that might be using this script.
+    Write-Verbose "Find-E2PPath - Enforcing %LOCALAPPDATA% path."
+    # we avoid using admin module paths since I can't dynamnically add files there
+    $here = "$env:LOCALAPPDATA\Convert-Etl2Pcapng"
 
-        Write-Verbose "Find-E2PPath - Had to fall back to legacy %LOCALAPPDATA% path."
-        # we avoid using admin module paths since I can't dynamnically add files there
-        $here = "$env:LOCALAPPDATA\Convert-Etl2Pcapng"
-
-        # now that this is decided, add it to the script variable scope to speed things up in the future
-        $script:here = $here
-    } else {
-        return (Write-Error "This cannot be run outside of the Convert-ETL2PCAPNG module. Please install the Convert-ETL2PCAPNG module first:`n`nInstall-Module Convert-ELT2PCAPNG." -EA Stop)
-    }
-
-    if (-NOT $here) {
-        return (Write-Error "Failed to find a current user module path." -EA Stop)
-    }
+    # now that this is decided, add it to the script variable scope to speed things up in the future
+    $script:here = $here
 
     # create the directory if it is missing
     $dirFnd = Get-ChildItem $env:LOCALAPPDATA -Filter 'Convert-Etl2Pcapng' -Directory
@@ -1159,8 +1158,7 @@ function Get-WebFile {
 
 # FUNCTION: Find-GitReleaseLatest
 # PURPOSE:  Calls Github API to retrieve details about the latest release. Returns a PSCustomObject with repro, version (tag_name), and download URL.
-function Find-GitReleaseLatest
-{
+function Find-GitReleaseLatest {
     [CmdletBinding()]
     param(
         [string]$repo
@@ -1314,8 +1312,7 @@ function Find-E2PSoftware {
 } #end Find-E2PSoftware
 
 
-function New-RegKey 
-{
+function New-RegKey {
     [CmdletBinding()]
     param(
         [string]$path,
