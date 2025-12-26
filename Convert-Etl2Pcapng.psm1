@@ -17,7 +17,7 @@ To-DO:
   - In the future, I can add an update function that automates any changes.
 - ISSUE 13 (GI12): Add check for wt.exe
 - DONE - ISSUE 14/15 (GI15): *-Etl2pcapng fails to write settings
-- ISSUE 16 (GI16): Add pktmon support.
+- DONE - ISSUE 16 (GI16): Add pktmon support.
 - ISSUE 17 (GI17): Fix right-click context menu for Windows 11
 - 
 
@@ -27,7 +27,7 @@ To-DO:
 
 ### CONSTANTS ###
 # version of Convert-Etl2Pcapng
-$script:CurrentE2PVersion = "2025.05.0001"
+$script:CurrentE2PVersion = "2025.12.0001"
 
 
 ################
@@ -69,7 +69,7 @@ function Register-Etl2Pcapng {
     )
 
     Write-Verbose "Register-Etl2Pcapng - Work! Work!"
-    Write-Verbose "Convert-Etl2Pcapng: Using PowerShell Version $($PSVersionTable.PSVersion)"
+    Write-Verbose "Convert-Etl2Pcapng - Using PowerShell Version $($PSVersionTable.PSVersion)"
     # test for Admin access
     Write-Verbose "Register-Etl2Pcapng - Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
@@ -308,7 +308,7 @@ function Unregister-Etl2Pcapng {
     #>
 
     Write-Verbose "Unregister-Etl2Pcapng: Work! Work!"
-    Write-Verbose "Convert-Etl2Pcapng: Using PowerShell Version $($PSVersionTable.PSVersion)"
+    Write-Verbose "Convert-Etl2Pcapng - Using PowerShell Version $($PSVersionTable.PSVersion)"
     # test for Admin access
     Write-Verbose "Unregister-Etl2Pcapng: Test admin rights."
     if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 
@@ -518,12 +518,12 @@ function Convert-Etl2Pcapng {
     )
 
 
-    Write-Verbose "Convert-Etl2Pcapng: Work! Work!"
-    Write-Verbose "Convert-Etl2Pcapng: Using PowerShell Version $($PSVersionTable.PSVersion)"
+    Write-Verbose "Convert-Etl2Pcapng - Work! Work!"
+    Write-Verbose "Convert-Etl2Pcapng - Using PowerShell Version $($PSVersionTable.PSVersion)"
 
     ### Validating paths and parameters ###
     # check the path param
-    Write-Verbose "Convert-Etl2Pcapng: Validate Path."
+    Write-Verbose "Convert-Etl2Pcapng - Validate Path."
     if ($PSPath -is [System.IO.FileSystemInfo]) 
     {
         $isPathFnd = $PSPath
@@ -539,22 +539,22 @@ function Convert-Etl2Pcapng {
         # is this a container/directory
         if ($isPathFnd.PSisContainer) 
         {
-            Write-Verbose "Convert-Etl2Pcapng: Searching for ETL files in $($isPathFnd.FullName)."
+            Write-Verbose "Convert-Etl2Pcapng - Searching for ETL files in $($isPathFnd.FullName)."
             # look for ETL files
             if ($Recurse) 
             {
-                Write-Verbose "Convert-Etl2Pcapng: Dir with child container recurse."
+                Write-Verbose "Convert-Etl2Pcapng - Dir with child container recurse."
                 [array]$etlFiles = Get-ChildItem $isPathFnd.FullName -Filter "*.etl" -Recurse -Force -ErrorAction SilentlyContinue
             }
             else 
             {
-                Write-Verbose "Convert-Etl2Pcapng: Dir with no child containers."
+                Write-Verbose "Convert-Etl2Pcapng - Dir with no child containers."
                 [array]$etlFiles = Get-ChildItem $isPathFnd.FullName -Filter "*.etl" -Force -ErrorAction SilentlyContinue
             }
         }
         elseif ($isPathFnd.Extension -eq ".etl") 
         {
-            Write-Verbose "Convert-Etl2Pcapng: Single file."
+            Write-Verbose "Convert-Etl2Pcapng - Single file."
             [array]$etlFiles = $isPathFnd
         }
     }
@@ -564,11 +564,11 @@ function Convert-Etl2Pcapng {
     {
         if ($PSPath -is [System.IO.FileSystemInfo]) 
         {
-            Write-Error "Convert-Etl2Pcapng: Failed to find a valid ETL file. Path: $($PSPath.FullName)"
+            Write-Error "Convert-Etl2Pcapng - Failed to find a valid ETL file. Path: $($PSPath.FullName)"
         }
         else 
         {
-            Write-Error "Convert-Etl2Pcapng: Failed to find a valid ETL file. Path: $Path"
+            Write-Error "Convert-Etl2Pcapng - Failed to find a valid ETL file. Path: $Path"
         }
         return $null
     }
@@ -576,11 +576,11 @@ function Convert-Etl2Pcapng {
     # make sure $Out is a valid location
     if ($Out) 
     {
-        Write-Verbose "Convert-Etl2Pcapng: Validate Out."
+        Write-Verbose "Convert-Etl2Pcapng - Validate Out."
 
         if (-NOT (Test-Path $Out -IsValid)) 
         {
-            Write-Error "Convert-Etl2Pcapng: The Out path is an invalid path. Out: $Out"
+            Write-Error "Convert-Etl2Pcapng - The Out path is an invalid path. Out: $Out"
             return $null
         }
 
@@ -589,20 +589,19 @@ function Convert-Etl2Pcapng {
         if (-NOT $isOutFnd) 
         {
             try {
-                Write-Verbose "Convert-Etl2Pcapng: Creating output path $Out"
+                Write-Verbose "Convert-Etl2Pcapng - Creating output path $Out"
                 New-Item "$Out" -ItemType Directory -Force -EA Stop | Out-Null
             }
             catch {
-                Write-Error "Convert-Etl2Pcapng: Failed to create Out directory at $Out. Error: $($error[0].ToString())"
+                Write-Error "Convert-Etl2Pcapng - Failed to create Out directory at $Out. Error: $($error[0].ToString())"
             }
         }
     }
 
 
     ### get the path to etl2pcapng.exe
-    Write-Verbose "Convert-Etl2Pcapng: Getting for etl2pcapng location."
-    try 
-    {
+    Write-Verbose "Convert-Etl2Pcapng - Getting for etl2pcapng location."
+    try {
         if ($AcceptEULA.IsPresent)
         {
             [string]$e2pPath = Update-Etl2Pcapng -AcceptEULA
@@ -612,69 +611,68 @@ function Convert-Etl2Pcapng {
             [string]$e2pPath = Update-Etl2Pcapng
         }
         
-    }
-    catch 
-    {
+    } catch {
         return (Write-Error "Settings failure: $_" -EA Stop)
     }
 
     # validate etl2pcapng is actually there and strip out the parent dir
-    if ($e2pPath) 
-    {
-        Write-Verbose "Convert-Etl2Pcapng: Received etl2pcapng location: '$e2pPath'"
+    if ($e2pPath) {
+        Write-Verbose "Convert-Etl2Pcapng - Received etl2pcapng location: '$e2pPath'"
 
         # need this to trim a mysterious leading space when etl2pcapng is first downloaded and extracted
         $e2pPath = $e2pPath.Trim(" ")
 
-        Write-Verbose "Convert-Etl2Pcapng: Validating etl2pcapng location: '$e2pPath'"
+        Write-Verbose "Convert-Etl2Pcapng - Validating etl2pcapng location: '$e2pPath'"
 
         # putting this in a loop due to OneDrive delay shinanigans
         $c = 0
-        do
-        {
+        do {
             Start-Sleep -m 250
 
             $isE2PFnd = Get-Item "$e2pPath" -EA SilentlyContinue
-            Write-Verbose "Convert-Etl2Pcapng: Validated e2p path: $($isE2PFnd.FullName)"
+            Write-Verbose "Convert-Etl2Pcapng - Validated e2p path: $($isE2PFnd.FullName)"
 
             $c++
         } until ($isE2PFnd -or $c -ge 5)
         
         if ($isE2PFnd) {
             $e2pDir = $isE2PFnd.DirectoryName
-        }
-        else {
-            Write-Error "Convert-Etl2Pcapng: Failed to locate etl2pcanpng.exe."
+        } else {
+            Write-Error "Convert-Etl2Pcapng - Failed to locate etl2pcanpng.exe."
             return $null
         }
-    }
-    else
-    {
+    } else {
         return $null
     }
 
     #### Finally do the conversion work ####
-    Write-Verbose "Convert-Etl2Pcapng: Starting ETL to PCAPNG conversion(s)."
+    Write-Verbose "Convert-Etl2Pcapng - Starting ETL to PCAPNG conversion(s)."
     Push-Location $e2pDir
-    foreach ($file in $etlFiles) 
-    {
-        if ($Out) 
-        {
-            Write-Verbose "Convert-Etl2Pcapng: Converting $($file.FullName) to $Out\$($file.BaseName).pcapng"
-            .\etl2pcapng.exe "$($file.FullName)" "$Out\$($file.BaseName).pcapng"
+    foreach ($file in $etlFiles) {
+        # GI16 - Add pktmon support by saving the output from etl2pcapng.exe
+        if ($Out) {
+            $etlOutFile = "$Out\$($file.BaseName).pcapng"
+        } else {
+            $etlOutFile = "$($file.DirectoryName)\$($file.BaseName).pcapng"
         }
-        else 
-        {
-            Write-Verbose "Convert-Etl2Pcapng: Converting $($file.FullName) to $($file.DirectoryName)\$($file.BaseName).pcapng"
-            .\etl2pcapng.exe "$($file.FullName)" "$($file.DirectoryName)\$($file.BaseName).pcapng"
+
+        # attempt the conversion
+        Write-Verbose "Convert-Etl2Pcapng - Converting $($file.FullName) to $etlOutFile"
+        $e2pOut = .\etl2pcapng.exe "$($file.FullName)" "$etlOutFile" 2>&1
+        Write-Verbose "Convert-Etl2Pcapng - etl2pcapng result:`n$($e2pOut | Out-String)`n"
+
+        # GI16 - Convert with pktmon when etl2pcapng cannot
+        if ($e2pOut -match "This file should be converted with pktmon") {
+            Write-Verbose "Convert-Etl2Pcapng - Switching to pktmon to convert the ETL to pcapng."
+            $e2pktOut = pktmon etl2pcap "$($file.FullName)" --out "$etlOutFile" 2>&1
+            Write-Verbose "Convert-Etl2Pcapng - pktmon etl2pcap result:`n$($e2pktOut | Out-String)`n"
         }
     }
     Pop-Location
 
-    Write-Verbose "Convert-Etl2Pcapng: Work complete!"
+    Write-Verbose "Convert-Etl2Pcapng - Work complete!"
 
-    if ($Pause.IsPresent)
-    {
+    if ($Pause.IsPresent) {
         $null = Read-Host "Press Enter to continue..."
     }
 } #end Convert-Etl2Pcapng
