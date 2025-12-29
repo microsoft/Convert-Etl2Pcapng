@@ -28,7 +28,7 @@ To-DO:
 
 ### CONSTANTS ###
 # version of Convert-Etl2Pcapng
-$script:CurrentE2PVersion = "2025.12.02"
+$script:CurrentE2PVersion = "2025.12.03"
 
 
 ################
@@ -779,8 +779,7 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
         
         Write-Verbose "Update-Etl2Pcapng - The latest release is:`n`n$($latest | Format-Table | Out-String)"
 
-        if ($latest.Version -gt $settings.CurrVersion) 
-        {
+        if ($latest.Version -gt $settings.CurrVersion -or $Force.IsPresent) {
             Write-Verbose "Update-Etl2Pcapng - Cleaning up existing files."
             
             # remove the existing etl2pcapng copy(ies)
@@ -797,12 +796,12 @@ By agreeing to the EULA you permit the Convert-Etl2Pcapng module to contact gith
 
             Write-Verbose "Update-Etl2Pcapng - Downloading etl2pcapng"
             # grab the etl2pcapng tags page from GitHub
-            try 
-            {
+            try {
                 # Version 1.10.0 and newer are an uncompressed amd64 binary
-                $e2pPath = Get-WebFile -Uri $latest.URL -savePath "$here" -fileName "etl2pcapng.exe" -EA Stop
+                Write-Verbose "Update-Etl2Pcapng - Downloading to: $here"
+                $e2pPath = Get-WebFile -Uri $latest.URL -Path "$here" -fileName "etl2pcapng.exe" -EA Stop
             } catch {
-                return (Write-Error "Update-Etl2Pcapng - Cannot reach the etl2pcapng GitHub page: $_" -EA Stop)
+                return (Write-Error "Cannot reach the etl2pcapng GitHub page: $_" -EA Stop)
             }
 
             # update the installed version
@@ -1039,12 +1038,9 @@ function Get-WebFile {
     Write-Debug "Get-WebFile - Start."
 
     # validate path
-    if ( -NOT (Test-Path "$Path" -IsValid) ) {
-        return (Write-Error "The save path, $Path, is not valid. Error: $_" -EA Stop)
-    }
-
+    $pathFnd = Get-Item "$Path" -Force -EA Ignore
     # create the path if missing
-    if ( -NOT (Get-Item "$Path" -EA SilentlyContinue) ) {
+    if ( -NOT $pathFnd ) {
         try {
             $null = mkdir "$Path" -Force -EA Stop
         } catch {
